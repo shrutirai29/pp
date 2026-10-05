@@ -13,6 +13,7 @@ import { BottomFeatureGrid } from '@/components/dashboard/BottomFeatureGrid';
 import { NewMissionModal } from '@/components/modals/NewMissionModal';
 import { InspectContractModal } from '@/components/modals/InspectContractModal';
 import { TopologyModal } from '@/components/modals/TopologyModal';
+import { PresetsModal } from '@/components/modals/PresetsModal';
 import { DocsModal } from '@/components/DocsModal';
 import { PayPalSettingsModal } from '@/components/PayPalSettingsModal';
 
@@ -30,6 +31,7 @@ export default function Home() {
   // Modal visibility states
   const [isNewMissionOpen, setIsNewMissionOpen] = useState(false);
   const [isTopologyOpen, setIsTopologyOpen] = useState(false);
+  const [isPresetsOpen, setIsPresetsOpen] = useState(false);
   const [isDocsOpen, setIsDocsOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [inspectedTask, setInspectedTask] = useState<TaskContract | null>(null);
@@ -44,6 +46,47 @@ export default function Home() {
     clientSecret: '',
     currency: 'USD',
   });
+
+  const scrollToSection = (elementId: string) => {
+    const el = document.getElementById(elementId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const handleSidebarNav = (tab: string) => {
+    setActiveTab(tab);
+    switch (tab) {
+      case 'home':
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        break;
+      case 'new_mission':
+        setIsNewMissionOpen(true);
+        break;
+      case 'agent_swarm':
+        scrollToSection('agent-swarm');
+        break;
+      case 'audit_ledger':
+        scrollToSection('audit-ledger');
+        break;
+      case 'escrow_vault':
+        scrollToSection('escrow-vault');
+        break;
+      case 'activity_stream':
+        scrollToSection('activity-stream');
+        break;
+      case 'mission_presets':
+        setIsPresetsOpen(true);
+        scrollToSection('mission-presets');
+        break;
+      case 'settings':
+        setIsSettingsOpen(true);
+        break;
+      case 'docs_guide':
+        setIsDocsOpen(true);
+        break;
+    }
+  };
 
   const handleLaunchMission = (
     title: string,
@@ -141,13 +184,7 @@ export default function Home() {
       {/* 1. Left Navigation Sidebar */}
       <Sidebar
         activeTab={activeTab}
-        setActiveTab={(tab) => {
-          setActiveTab(tab);
-          if (tab === 'new_mission') setIsNewMissionOpen(true);
-          if (tab === 'agent_swarm') setIsTopologyOpen(true);
-          if (tab === 'settings') setIsSettingsOpen(true);
-          if (tab === 'docs_guide') setIsDocsOpen(true);
-        }}
+        setActiveTab={handleSidebarNav}
         isLiveSandbox={isLiveSandbox}
         onToggleSandbox={(live) => setIsLiveSandbox(live)}
       />
@@ -170,7 +207,7 @@ export default function Home() {
             agents={agents}
             currentPhase={currentPhase}
             onCreateMission={() => setIsNewMissionOpen(true)}
-            onExplorePresets={() => handleSelectPreset(0)}
+            onExplorePresets={() => setIsPresetsOpen(true)}
             onSelectAgent={() => setIsTopologyOpen(true)}
           />
 
@@ -182,41 +219,51 @@ export default function Home() {
             {/* Left Column (Approx 65% width) */}
             <div className="lg:col-span-7 space-y-6">
               {/* Agent Swarm Row */}
-              <AgentSwarmGrid
-                agents={agents}
-                onOpenTopology={() => setIsTopologyOpen(true)}
-                onSelectAgent={() => setIsTopologyOpen(true)}
-              />
+              <div id="agent-swarm">
+                <AgentSwarmGrid
+                  agents={agents}
+                  onOpenTopology={() => setIsTopologyOpen(true)}
+                  onSelectAgent={() => setIsTopologyOpen(true)}
+                />
+              </div>
 
               {/* AG Grid Live Contract Ledger */}
-              <LedgerGrid
-                tasks={tasks}
-                onViewDeliverable={(task) => setInspectedTask(task)}
-              />
+              <div id="audit-ledger">
+                <LedgerGrid
+                  tasks={tasks}
+                  onViewDeliverable={(task) => setInspectedTask(task)}
+                />
+              </div>
             </div>
 
             {/* Right Column (Approx 35% width) */}
             <div className="lg:col-span-5 space-y-6">
               {/* Escrow Vault Card with 3D Padlock Artwork */}
-              <EscrowVaultCard tasks={tasks} />
+              <div id="escrow-vault">
+                <EscrowVaultCard tasks={tasks} />
+              </div>
 
               {/* Terminal Event Bus Card */}
-              <TerminalEventBusCard
-                logs={logs}
-                onClear={() => setLogs([])}
-              />
+              <div id="activity-stream">
+                <TerminalEventBusCard
+                  logs={logs}
+                  onClear={() => setLogs([])}
+                />
+              </div>
             </div>
           </div>
 
           {/* Bottom 4 Feature Cards */}
-          <BottomFeatureGrid
-            onSelectPreset={handleSelectPreset}
-            onVerifyPayPal={handleVerifyOAuth}
-            isVerifyingPayPal={isVerifyingPayPal}
-            verifyMessage={verifyMessage}
-            isLiveSandbox={isLiveSandbox}
-            onToggleSandbox={(live) => setIsLiveSandbox(live)}
-          />
+          <div id="mission-presets">
+            <BottomFeatureGrid
+              onSelectPreset={handleSelectPreset}
+              onVerifyPayPal={handleVerifyOAuth}
+              isVerifyingPayPal={isVerifyingPayPal}
+              verifyMessage={verifyMessage}
+              isLiveSandbox={isLiveSandbox}
+              onToggleSandbox={(live) => setIsLiveSandbox(live)}
+            />
+          </div>
         </main>
       </div>
 
@@ -225,6 +272,12 @@ export default function Home() {
         isOpen={isNewMissionOpen}
         onClose={() => setIsNewMissionOpen(false)}
         onLaunchMission={handleLaunchMission}
+      />
+
+      <PresetsModal
+        isOpen={isPresetsOpen}
+        onClose={() => setIsPresetsOpen(false)}
+        onSelectPreset={handleSelectPreset}
       />
 
       <InspectContractModal
