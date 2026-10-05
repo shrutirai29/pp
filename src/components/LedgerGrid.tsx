@@ -9,7 +9,7 @@ import {
   type ColDef,
   type ICellRendererParams,
 } from 'ag-grid-community';
-import { Download, Search, ExternalLink, CheckCircle, Clock, AlertTriangle, Eye, ShieldCheck } from 'lucide-react';
+import { Download, Search, ExternalLink, Eye, MoreVertical, SlidersHorizontal } from 'lucide-react';
 import { TaskContract } from '@/types';
 
 // Register AG Grid Community modules
@@ -24,17 +24,17 @@ export const LedgerGrid: React.FC<LedgerGridProps> = ({ tasks, onViewDeliverable
   const gridRef = useRef<AgGridReact<TaskContract>>(null);
   const [quickFilterText, setQuickFilterText] = useState('');
 
-  // Dark quartz theme customized for high-tech aesthetic
-  const customTheme = useMemo(() => {
+  // Clean Light Mode Quartz theme matching the reference dashboard
+  const lightQuartzTheme = useMemo(() => {
     return themeQuartz.withParams({
-      backgroundColor: '#020617', // slate-950
-      foregroundColor: '#f1f5f9', // slate-100
-      headerBackgroundColor: '#0f172a', // slate-900
-      headerTextColor: '#94a3b8', // slate-400
-      borderColor: '#1e293b', // slate-800
-      oddRowBackgroundColor: '#020617',
-      selectedRowBackgroundColor: '#1e293b',
-      accentColor: '#38bdf8', // cyan-400
+      backgroundColor: '#FFFFFF',
+      foregroundColor: '#101936',
+      headerBackgroundColor: '#F8FAFC',
+      headerTextColor: '#64748B',
+      borderColor: '#E2E8F0',
+      oddRowBackgroundColor: '#FFFFFF',
+      selectedRowBackgroundColor: '#F1F5F9',
+      accentColor: '#4361F7',
       fontFamily: 'inherit',
     });
   }, []);
@@ -43,21 +43,21 @@ export const LedgerGrid: React.FC<LedgerGridProps> = ({ tasks, onViewDeliverable
   const handleExportCsv = useCallback(() => {
     if (gridRef.current?.api) {
       gridRef.current.api.exportDataAsCsv({
-        fileName: `payagent-ledger-${new Date().toISOString().slice(0, 10)}.csv`,
+        fileName: `payagent-audit-ledger-${new Date().toISOString().slice(0, 10)}.csv`,
       });
     }
   }, []);
 
-  // Column definitions
+  // Column definitions matching reference image
   const columnDefs = useMemo<ColDef<TaskContract>[]>(() => {
     return [
       {
         field: 'id',
         headerName: 'Task ID',
-        width: 120,
+        width: 110,
         filter: 'agTextColumnFilter',
         cellRenderer: (params: ICellRendererParams<TaskContract>) => (
-          <span className="font-mono text-xs text-cyan-400 font-semibold">
+          <span className="font-mono text-xs text-[#4361F7] font-bold">
             {params.value}
           </span>
         ),
@@ -66,83 +66,89 @@ export const LedgerGrid: React.FC<LedgerGridProps> = ({ tasks, onViewDeliverable
         field: 'title',
         headerName: 'Contract Title',
         flex: 1.5,
-        minWidth: 200,
+        minWidth: 190,
         filter: 'agTextColumnFilter',
         cellRenderer: (params: ICellRendererParams<TaskContract>) => (
-          <div className="leading-tight py-1">
-            <div className="font-medium text-slate-100 text-xs truncate">{params.data?.title}</div>
-            <div className="text-[11px] text-slate-400 truncate">{params.data?.description}</div>
-          </div>
+          <span className="font-medium text-[#101936] text-xs">
+            {params.value}
+          </span>
         ),
       },
       {
         field: 'assignedAgentName',
         headerName: 'Assigned Agent',
-        width: 160,
+        width: 140,
         filter: 'agTextColumnFilter',
-        cellRenderer: (params: ICellRendererParams<TaskContract>) => (
-          <div className="flex items-center space-x-2 py-1">
-            <span className="text-xs font-semibold text-slate-200">
-              {params.data?.assignedAgentName}
-            </span>
-          </div>
-        ),
+        cellRenderer: (params: ICellRendererParams<TaskContract>) => {
+          const agentName = params.data?.assignedAgentName || 'Agent';
+          return (
+            <div className="flex items-center space-x-1.5 py-1">
+              <div className="w-5 h-5 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-[11px]">
+                {agentName === 'Nova' ? '🛰️' : agentName === 'Cipher' ? '🛡️' : agentName === 'Synthex' ? '⚡' : '📈'}
+              </div>
+              <span className="text-xs font-semibold text-slate-800">
+                {agentName}
+              </span>
+            </div>
+          );
+        },
       },
       {
         field: 'budget',
         headerName: 'Budget',
-        width: 110,
+        width: 100,
         filter: 'agNumberColumnFilter',
         cellRenderer: (params: ICellRendererParams<TaskContract>) => (
-          <span className="font-mono text-xs font-bold text-emerald-400">
-            ${params.value?.toFixed(2)} USD
+          <span className="font-mono text-xs font-bold text-slate-800">
+            ${params.value?.toFixed(2)}
           </span>
         ),
       },
       {
         field: 'status',
         headerName: 'Escrow Status',
-        width: 150,
+        width: 145,
         cellRenderer: (params: ICellRendererParams<TaskContract>) => {
           const status = params.value as TaskContract['status'];
           switch (status) {
-            case 'paid':
+            case 'settled':
               return (
-                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[11px] font-medium">
-                  <CheckCircle className="w-3 h-3" />
-                  <span>Settled (Paid)</span>
+                <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 text-[11px] font-semibold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  <span>Settled / Paid</span>
                 </span>
               );
-            case 'evaluating':
+            case 'under_qa':
               return (
-                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/30 text-[11px] font-medium animate-pulse">
-                  <ShieldCheck className="w-3 h-3" />
-                  <span>QA Audit</span>
+                <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200 text-[11px] font-semibold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  <span>Under QA</span>
                 </span>
               );
             case 'in_progress':
               return (
-                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/30 text-[11px] font-medium">
-                  <Clock className="w-3 h-3" />
+                <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200 text-[11px] font-semibold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
                   <span>In Progress</span>
                 </span>
               );
             case 'escrow_authorized':
               return (
-                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[11px] font-medium">
+                <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-600 border border-purple-200 text-[11px] font-semibold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
                   <span>Escrow Locked</span>
                 </span>
               );
             case 'disputed':
               return (
-                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/30 text-[11px] font-medium">
-                  <AlertTriangle className="w-3 h-3" />
+                <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200 text-[11px] font-semibold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                   <span>Disputed</span>
                 </span>
               );
             default:
               return (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 text-[11px]">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[11px]">
                   <span>Pending</span>
                 </span>
               );
@@ -150,82 +156,80 @@ export const LedgerGrid: React.FC<LedgerGridProps> = ({ tasks, onViewDeliverable
         },
       },
       {
+        headerName: 'QA Score',
+        width: 95,
+        cellRenderer: (params: ICellRendererParams<TaskContract>) => {
+          const score = params.data?.deliverable?.qualityScore;
+          if (score === undefined) return <span className="text-slate-400 text-xs font-mono">—</span>;
+          const isHigh = score >= 90;
+          const isMid = score >= 75;
+          return (
+            <span
+              className={`font-mono text-xs font-bold px-2 py-0.5 rounded-full ${
+                isHigh
+                  ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                  : isMid
+                  ? 'bg-amber-100 text-amber-700 border border-amber-200'
+                  : 'bg-rose-100 text-rose-700 border border-rose-200'
+              }`}
+            >
+              {score}
+            </span>
+          );
+        },
+      },
+      {
         field: 'paypalPayoutBatchId',
         headerName: 'PayPal Tx Proof',
         width: 170,
         cellRenderer: (params: ICellRendererParams<TaskContract>) => {
-          if (!params.value) {
-            return <span className="text-slate-600 text-[11px] font-mono italic">Awaiting release</span>;
+          const val = params.value || params.data?.paypalOrderId || params.data?.paypalAuthorizationId;
+          if (!val) {
+            return <span className="text-slate-400 text-xs font-mono">—</span>;
           }
           return (
-            <div className="flex items-center space-x-1 text-xs font-mono text-blue-400">
-              <span className="truncate max-w-[120px]" title={params.value}>
-                {params.value}
-              </span>
-              <ExternalLink className="w-3 h-3 opacity-60 flex-shrink-0" />
+            <div className="flex items-center space-x-1 text-xs font-mono text-[#4361F7] hover:underline cursor-pointer">
+              <span className="truncate max-w-[120px]">{val}</span>
+              <ExternalLink className="w-3 h-3 opacity-70 flex-shrink-0" />
             </div>
           );
         },
       },
       {
-        headerName: 'QA Score',
+        headerName: 'Actions',
         width: 110,
-        cellRenderer: (params: ICellRendererParams<TaskContract>) => {
-          const score = params.data?.deliverable?.qualityScore;
-          if (score === undefined) return <span className="text-slate-600 text-xs font-mono">-</span>;
-          return (
-            <span
-              className={`font-mono text-xs font-bold px-2 py-0.5 rounded ${
-                score >= 90
-                  ? 'bg-emerald-500/20 text-emerald-300'
-                  : score >= 80
-                  ? 'bg-blue-500/20 text-blue-300'
-                  : 'bg-rose-500/20 text-rose-300'
-              }`}
-            >
-              {score}/100
-            </span>
-          );
-        },
-      },
-      {
-        headerName: 'Inspect',
-        width: 100,
         pinned: 'right',
-        cellRenderer: (params: ICellRendererParams<TaskContract>) => {
-          const hasDeliverable = Boolean(params.data?.deliverable);
-          return (
+        cellRenderer: (params: ICellRendererParams<TaskContract>) => (
+          <div className="flex items-center space-x-1 py-1">
             <button
               onClick={() => params.data && onViewDeliverable(params.data)}
-              disabled={!hasDeliverable}
-              className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium flex items-center space-x-1 disabled:opacity-30 disabled:cursor-not-allowed transition"
-              title="View Deliverable & QA Report"
+              className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-[#4361F7] text-xs font-semibold flex items-center space-x-1 transition cursor-pointer"
             >
-              <Eye className="w-3 h-3 text-cyan-400" />
-              <span>Audit</span>
+              <Eye className="w-3 h-3" />
+              <span>Inspect</span>
             </button>
-          );
-        },
+            <button className="p-1 text-slate-400 hover:text-slate-600">
+              <MoreVertical className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ),
       },
     ];
   }, [onViewDeliverable]);
 
   return (
-    <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-xl backdrop-blur-md">
+    <div className="bg-white border border-[#E3E8F5] rounded-3xl p-5 shadow-sm">
       {/* Table Toolbar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-        <div>
-          <div className="flex items-center space-x-2">
-            <h3 className="text-sm font-semibold text-white tracking-tight">
-              AG Grid Real-Time Audit Ledger
-            </h3>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
-              AG Grid v36
-            </span>
+        <div className="flex items-center space-x-2">
+          <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white text-[11px] font-black">
+            P
           </div>
-          <p className="text-xs text-slate-400">
-            Cryptographic escrow holds, automated PayPal payouts, and QA score verification
-          </p>
+          <h3 className="text-sm font-bold text-[#101936]">AG Grid</h3>
+          <span className="flex items-center space-x-1 text-[11px] text-slate-500 font-medium">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            <span>Live Contract Ledger</span>
+          </span>
         </div>
 
         <div className="flex items-center space-x-2">
@@ -234,36 +238,41 @@ export const LedgerGrid: React.FC<LedgerGridProps> = ({ tasks, onViewDeliverable
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Search contracts..."
+              placeholder="Search contracts, agents..."
               value={quickFilterText}
               onChange={(e) => setQuickFilterText(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 w-48 sm:w-56"
+              className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:border-[#4361F7] w-48 sm:w-56"
             />
           </div>
 
           {/* Export to CSV */}
           <button
             onClick={handleExportCsv}
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition"
-            title="Export Ledger to CSV"
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold border border-[#E2E8F0] shadow-sm transition cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Export CSV</span>
+          </button>
+
+          {/* Column Toggle / Filter */}
+          <button
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold border border-[#E2E8F0] shadow-sm transition cursor-pointer"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Columns</span>
           </button>
         </div>
       </div>
 
       {/* AG Grid Container */}
-      <div className="h-[360px] w-full rounded-xl overflow-hidden border border-slate-800/80">
+      <div className="h-[290px] w-full rounded-2xl overflow-hidden border border-[#E2E8F0]">
         <AgGridReact
           ref={gridRef}
-          theme={customTheme}
+          theme={lightQuartzTheme}
           rowData={tasks}
           columnDefs={columnDefs}
           quickFilterText={quickFilterText}
-          pagination={true}
-          paginationPageSize={10}
-          paginationPageSizeSelector={[10, 20, 50]}
+          pagination={false}
           defaultColDef={{
             sortable: true,
             resizable: true,

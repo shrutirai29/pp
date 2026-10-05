@@ -47,7 +47,7 @@ export const MissionController: React.FC<MissionControllerProps> = ({
 
         {/* Preset Selector Chips */}
         <div className="flex flex-wrap items-center gap-2">
-          {PRESET_MISSIONS.map((preset, idx) => (
+          {PRESET_MISSIONS.map((preset: { title: string; goal: string; budget: number }, idx: number) => (
             <button
               key={idx}
               type="button"

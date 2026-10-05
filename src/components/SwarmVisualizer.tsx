@@ -23,6 +23,7 @@ export const SwarmVisualizer: React.FC<SwarmVisualizerProps> = ({ agents }) => {
           </span>
         );
       case 'qa_eval':
+      case 'under_qa':
         return (
           <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/30 text-[10px] font-medium animate-pulse">
             <ShieldCheck className="w-2.5 h-2.5" />
@@ -30,6 +31,7 @@ export const SwarmVisualizer: React.FC<SwarmVisualizerProps> = ({ agents }) => {
           </span>
         );
       case 'paid':
+      case 'settled':
         return (
           <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[10px] font-medium">
             <CheckCircle2 className="w-2.5 h-2.5" />
@@ -99,7 +101,7 @@ export const SwarmVisualizer: React.FC<SwarmVisualizerProps> = ({ agents }) => {
             className={`p-3.5 rounded-xl bg-slate-950/70 border transition-all ${
               worker.status === 'working'
                 ? 'border-blue-500/60 shadow-lg shadow-blue-500/10'
-                : worker.status === 'paid'
+                : worker.status === 'paid' || worker.status === 'settled'
                 ? 'border-emerald-500/40 bg-emerald-950/10'
                 : 'border-slate-800 hover:border-slate-700'
             }`}

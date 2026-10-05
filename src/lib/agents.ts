@@ -1,84 +1,354 @@
-import { Agent, TaskContract, Deliverable } from '@/types';
+import { Agent, TaskContract, SwarmEventLog, Deliverable } from '@/types';
 
-export const INITIAL_AGENTS: Agent[] = [
-  {
-    id: 'agent_orchestrator',
-    name: 'PayOrchestrator',
-    role: 'orchestrator',
-    specialty: 'Orchestrator',
-    avatar: '👑',
-    payoutEmail: 'orchestrator@payagent.network',
-    ratePerTask: 0,
-    rating: 5.0,
-    tasksCompleted: 428,
-    status: 'idle',
-  },
+export const SEED_AGENTS: Agent[] = [
   {
     id: 'agent_nova',
     name: 'Agent Nova',
     role: 'worker',
     specialty: 'Data Harvester',
     avatar: '🛰️',
+    colorScheme: {
+      primary: '#8055F7',
+      secondary: '#F3E8FF',
+      accent: '#C084FC',
+      border: '#E9D5FF',
+    },
     payoutEmail: 'nova.data@payagent.sandbox',
     ratePerTask: 3.50,
-    rating: 4.95,
-    tasksCompleted: 142,
-    status: 'idle',
+    rating: 4.8,
+    tasks: 12,
+    completedTasks: 10,
+    inProgressTasks: 2,
+    status: 'working',
+    currentTaskId: 'DATA-088',
   },
   {
     id: 'agent_cipher',
     name: 'Agent Cipher',
     role: 'worker',
-    specialty: 'Code & Security Auditor',
+    specialty: 'Security Auditor',
     avatar: '🛡️',
+    colorScheme: {
+      primary: '#1E40AF',
+      secondary: '#DBEAFE',
+      accent: '#3B82F6',
+      border: '#BFDBFE',
+    },
     payoutEmail: 'cipher.sec@payagent.sandbox',
     ratePerTask: 6.00,
-    rating: 4.98,
-    tasksCompleted: 89,
-    status: 'idle',
+    rating: 4.9,
+    tasks: 11,
+    completedTasks: 9,
+    inProgressTasks: 2,
+    status: 'settled',
+    currentTaskId: 'SEC-014',
   },
   {
     id: 'agent_synthex',
     name: 'Agent Synthex',
     role: 'worker',
-    specialty: 'Synthesis & Writer',
+    specialty: 'Technical Writer',
     avatar: '⚡',
+    colorScheme: {
+      primary: '#DB2777',
+      secondary: '#FCE7F3',
+      accent: '#F472B6',
+      border: '#FBCFE8',
+    },
     payoutEmail: 'synthex.write@payagent.sandbox',
     ratePerTask: 4.50,
-    rating: 4.92,
-    tasksCompleted: 215,
-    status: 'idle',
+    rating: 4.7,
+    tasks: 10,
+    completedTasks: 8,
+    inProgressTasks: 2,
+    status: 'working',
+    currentTaskId: 'DOC-103',
   },
   {
     id: 'agent_metric',
     name: 'Agent Metric',
     role: 'worker',
-    specialty: 'SEO & Market Quant',
+    specialty: 'Market Quant',
     avatar: '📈',
+    colorScheme: {
+      primary: '#059669',
+      secondary: '#D1FAE5',
+      accent: '#34D399',
+      border: '#A7F3D0',
+    },
     payoutEmail: 'metric.quant@payagent.sandbox',
     ratePerTask: 4.00,
-    rating: 4.88,
-    tasksCompleted: 112,
-    status: 'idle',
-  },
-  {
-    id: 'agent_judge',
-    name: 'JudgeLex QA',
-    role: 'evaluator',
-    specialty: 'Orchestrator',
-    avatar: '⚖️',
-    payoutEmail: 'judgelex.qa@payagent.sandbox',
-    ratePerTask: 1.50,
-    rating: 5.0,
-    tasksCompleted: 610,
-    status: 'idle',
+    rating: 4.6,
+    tasks: 8,
+    completedTasks: 6,
+    inProgressTasks: 2,
+    status: 'under_qa',
+    currentTaskId: 'MKT-027',
   },
 ];
+
+export const SEED_CONTRACTS: TaskContract[] = [
+  {
+    id: 'SEC-014',
+    missionId: 'MSN-INIT-01',
+    title: 'Audit PayPal API for CVEs',
+    description: 'Perform static vulnerability scan, inspect token expiry rotation, and test OWASP API Top 10 vulnerabilities.',
+    assignedAgentId: 'agent_cipher',
+    assignedAgentName: 'Cipher',
+    assignedAgentEmail: 'cipher.sec@payagent.sandbox',
+    budget: 15.00,
+    status: 'settled',
+    acceptanceCriteria: [
+      'OWASP API Top 10 Compliance Review',
+      'Verify HMAC-SHA256 signature verification code',
+      'Produce CVE classifications with CVSS v3.1 scoring',
+    ],
+    paypalOrderId: 'ORD-7HJ8K2',
+    paypalAuthorizationId: 'AUTH-9X2L8M',
+    paypalPayoutBatchId: 'PO-BATCH-9A2F3B',
+    paypalPayoutItemId: 'ITEM-8812',
+    paypalPayoutStatus: 'SUCCESS',
+    createdAt: '2026-10-04T13:40:00Z',
+    completedAt: '2026-10-04T14:06:00Z',
+    paidAt: '2026-10-04T14:06:24Z',
+    deliverable: {
+      summary: 'Completed comprehensive vulnerability analysis on payment endpoint routers.',
+      content: `# Payment Gateway Security Audit\n## Executive Summary\nWe analyzed the API surface and identified 3 high severity vulnerabilities.\n\n### Findings:\n1. **OWASP API3:2023 Broken Object Property Level Authorization**: Secondary query projections lacked tenant boundary checks.\n2. **Replay Protection**: Added nonces check for PayPal webhook headers.\n3. **Rate Limiting**: Applied token bucket algorithm.\n\n\`\`\`typescript\n// Remediation diff applied:\nexport function verifyWebhook(req: Request) {\n  const signature = req.headers.get('PAYPAL-AUTH-ALGO');\n  if (!signature) throw new Error('Invalid signature');\n  return true;\n}\n\`\`\`\n\n*Artifact Hash: sha256:e8b23c91a0f88219*`,
+      executionTimeMs: 1450,
+      qualityScore: 92,
+      evaluatorFeedback: 'JudgeLex QA: Exceeds acceptance threshold (92/100). All OWASP tests passed. Code diff clean and reproducible.',
+      verifiedAt: '2026-10-04T14:06:23Z',
+      criteriaResults: [
+        { name: 'OWASP Compliance', passed: true, evidence: 'All 10 endpoints verified against OWASP API rules.' },
+        { name: 'Schema Validity', passed: true, evidence: 'Strict JSON schema adheres to RFC 8259.' },
+        { name: 'Code Diff Check', passed: true, evidence: 'Git patch compiles without warnings.' },
+        { name: 'Report Quality', passed: true, evidence: 'CVSS scores provided for all 3 vectors.' },
+      ],
+    },
+  },
+  {
+    id: 'MKT-027',
+    missionId: 'MSN-INIT-01',
+    title: 'Competitor Pricing Analysis',
+    description: 'Scrape cross-platform SaaS tier pricing and evaluate margin opportunities.',
+    assignedAgentId: 'agent_metric',
+    assignedAgentName: 'Metric',
+    assignedAgentEmail: 'metric.quant@payagent.sandbox',
+    budget: 20.00,
+    status: 'under_qa',
+    acceptanceCriteria: [
+      'Extract pricing across 6 enterprise payment providers',
+      'Calculate interchange & processing markup deltas',
+      'Provide price-elasticity churn estimates',
+    ],
+    paypalOrderId: 'ORD-8KL99P',
+    paypalAuthorizationId: 'AUTH-4P7N1Q',
+    createdAt: '2026-10-04T13:45:00Z',
+    deliverable: {
+      summary: 'Compiled pricing matrices from Stripe, Adyen, Square, and Braintree.',
+      content: `# Competitor Pricing & Interchange Arbitrage\n## Key Metrics\n- Average Domestic Transaction Fee: 2.9% + $0.30\n- Cross-border Surcharge: 1.5%\n- Recommendation: Introduce tiered volume discounts at >$50k monthly volume.`,
+      executionTimeMs: 1980,
+      qualityScore: 78,
+      evaluatorFeedback: 'JudgeLex QA: In review. Score 78/100 (Below 80 threshold). Missing 2 competitor breakdown matrices.',
+      criteriaResults: [
+        { name: 'OWASP Compliance', passed: true, evidence: 'N/A for quantitative data.' },
+        { name: 'Schema Validity', passed: true, evidence: 'Dataset validated.' },
+        { name: 'Code Diff Check', passed: false, evidence: 'Data incomplete for 2 vendors.' },
+        { name: 'Report Quality', passed: true, evidence: 'Clear summary and charts.' },
+      ],
+    },
+  },
+  {
+    id: 'DOC-103',
+    missionId: 'MSN-INIT-01',
+    title: 'Remediation Playbook',
+    description: 'Synthesize findings into an executive-ready security implementation guide.',
+    assignedAgentId: 'agent_synthex',
+    assignedAgentName: 'Synthex',
+    assignedAgentEmail: 'synthex.write@payagent.sandbox',
+    budget: 12.50,
+    status: 'in_progress',
+    acceptanceCriteria: [
+      'Write step-by-step remediation guide',
+      'Include roll-back contingency plan',
+      'Provide compliance audit checklist',
+    ],
+    paypalOrderId: 'ORD-7HJ8K2',
+    paypalAuthorizationId: 'AUTH-7HJ8K2',
+    createdAt: '2026-10-04T13:50:00Z',
+  },
+  {
+    id: 'DATA-088',
+    missionId: 'MSN-INIT-01',
+    title: 'API Schema Mapping',
+    description: 'Map REST and GraphQL surface endpoints and normalize data types.',
+    assignedAgentId: 'agent_nova',
+    assignedAgentName: 'Nova',
+    assignedAgentEmail: 'nova.data@payagent.sandbox',
+    budget: 10.00,
+    status: 'escrow_authorized',
+    acceptanceCriteria: [
+      'Extract OpenAPI 3.1 specification',
+      'Flag deprecated endpoints and auth headers',
+      'Generate mock JSON fixtures for testing',
+    ],
+    paypalOrderId: 'ORD-3K9MZ1',
+    paypalAuthorizationId: 'AUTH-3K9MZ1',
+    createdAt: '2026-10-04T13:55:00Z',
+  },
+  {
+    id: 'RISK-021',
+    missionId: 'MSN-INIT-01',
+    title: 'Payment Flow Threat Model',
+    description: 'Identify multi-party fraud vectors in merchant split settlements.',
+    assignedAgentId: 'agent_cipher',
+    assignedAgentName: 'Cipher',
+    assignedAgentEmail: 'cipher.sec@payagent.sandbox',
+    budget: 18.00,
+    status: 'disputed',
+    acceptanceCriteria: [
+      'STRIDE threat modeling on webhook lifecycle',
+      'Simulate MITM replay attacks on PayPal notifications',
+      'Define automated dispute evidence requirements',
+    ],
+    paypalOrderId: 'ORD-4L2K9D',
+    paypalAuthorizationId: 'AUTH-4L2K9D',
+    paypalPayoutBatchId: 'PO-BATCH-4L2K9D',
+    createdAt: '2026-10-04T13:30:00Z',
+    deliverable: {
+      summary: 'Drafted threat model document. Escrow paused due to low coverage score.',
+      content: `# Threat Model: Multi-Party Settlement\n\nIdentified potential vulnerability in callback webhook verification. Remediation required.`,
+      executionTimeMs: 1200,
+      qualityScore: 65,
+      evaluatorFeedback: 'JudgeLex QA: Disputed (Score 65/100). Threat model lacks STRIDE matrix for merchant dispute scenarios.',
+    },
+  },
+];
+
+export const SEED_EVENTS: SwarmEventLog[] = [
+  {
+    id: 'EVT-1',
+    timestamp: '14:05:12',
+    source: 'ORCHESTRATOR',
+    category: 'planning',
+    message: 'Goal ingested and decomposed into 4 contracts',
+  },
+  {
+    id: 'EVT-2',
+    timestamp: '14:05:14',
+    source: 'PAYPAL_ESCROW',
+    category: 'escrow',
+    message: 'Order authorized $15.00 ORD-7HJ8K2',
+  },
+  {
+    id: 'EVT-3',
+    timestamp: '14:05:16',
+    source: 'AGENT_NODE',
+    category: 'bidding',
+    message: 'Agent Cipher claimed SEC-014',
+  },
+  {
+    id: 'EVT-4',
+    timestamp: '14:06:23',
+    source: 'JUDGELEX_QA',
+    category: 'qa',
+    message: 'Deliverable scored 92/100 • Approved',
+  },
+  {
+    id: 'EVT-5',
+    timestamp: '14:06:24',
+    source: 'PAYPAL_PAYOUT',
+    category: 'payout',
+    message: 'Payout sent to cipher.sec@payagent.sandbox PO-BATCH-9A2F3B',
+  },
+  {
+    id: 'EVT-6',
+    timestamp: '14:07:01',
+    source: 'GUARDRAIL',
+    category: 'safety',
+    message: 'Budget check passed (≤ $15.00)',
+  },
+  {
+    id: 'EVT-7',
+    timestamp: '14:08:12',
+    source: 'AGENT_NODE',
+    category: 'execution',
+    message: 'Agent Nova started data collection...',
+  },
+  {
+    id: 'EVT-8',
+    timestamp: '14:08:45',
+    source: 'SYSTEM',
+    category: 'system',
+    message: '3 contracts in progress, 1 under QA',
+  },
+];
+
+export function planMissionTasks(missionId: string, goal: string): TaskContract[] {
+  return [
+    {
+      id: `TSK-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+      missionId,
+      title: 'Endpoint Vulnerability & Surface Discovery',
+      description: 'Map REST attack surfaces and analyze rate-limiting thresholds.',
+      assignedAgentId: 'agent_nova',
+      assignedAgentName: 'Nova',
+      assignedAgentEmail: 'nova.data@payagent.sandbox',
+      budget: 3.50,
+      status: 'pending',
+      acceptanceCriteria: ['Identify top 5 API vulnerabilities', 'Extract schema entropy'],
+      createdAt: new Date().toISOString(),
+    },
+    {
+      id: `TSK-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+      missionId,
+      title: 'Cryptographic Auth & Token Expiry Audit',
+      description: 'Audit OAuth2 token exchange and replay protection.',
+      assignedAgentId: 'agent_cipher',
+      assignedAgentName: 'Cipher',
+      assignedAgentEmail: 'cipher.sec@payagent.sandbox',
+      budget: 6.00,
+      status: 'pending',
+      acceptanceCriteria: ['Verify HMAC-SHA256 signature verification code', 'Audit token TTL'],
+      createdAt: new Date().toISOString(),
+    },
+    {
+      id: `TSK-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+      missionId,
+      title: 'Executive Remediation Playbook',
+      description: 'Synthesize findings into executive risk scores and PR diffs.',
+      assignedAgentId: 'agent_synthex',
+      assignedAgentName: 'Synthex',
+      assignedAgentEmail: 'synthex.write@payagent.sandbox',
+      budget: 4.50,
+      status: 'pending',
+      acceptanceCriteria: ['Complete executive summary', 'Actionable code patches'],
+      createdAt: new Date().toISOString(),
+    },
+  ];
+}
+
+export function generateSyntheticDeliverable(task: TaskContract): Deliverable {
+  return {
+    summary: `Completed thorough inspection for "${task.title}". Identified core vectors and supplied verified patch diffs.`,
+    content: `# Audit Report: ${task.title}\n\n**Status**: PASSED ACCEPTANCE CRITERIA\n\n### Key Findings:\n1. OWASP API3 Broken Object Property Authorization resolved.\n2. Replay protection verified on PayPal webhook headers.\n3. Rate limiting threshold calibrated.\n\n*Artifact Hash: sha256:${Math.random().toString(36).substring(2, 12)}*`,
+    executionTimeMs: 1420,
+    qualityScore: 92,
+    evaluatorFeedback: 'JudgeLex QA: Criteria met with full verification. Release of PayPal Escrow approved.',
+    verifiedAt: new Date().toISOString(),
+    criteriaResults: [
+      { name: 'OWASP Compliance', passed: true, evidence: 'Verified against OWASP API rules.' },
+      { name: 'Schema Validity', passed: true, evidence: 'Strict JSON schema verified.' },
+      { name: 'Code Diff Check', passed: true, evidence: 'Git patch clean.' },
+      { name: 'Report Quality', passed: true, evidence: 'Full CVSS scores supplied.' },
+    ],
+  };
+}
 
 export const PRESET_MISSIONS = [
   {
     title: 'Autonomous Security & Risk Audit for Payment Gateway API',
-    goal: 'Perform static vulnerability scan, rate-limiting stress test simulation, and create an enterprise remediation playbook for payment endpoints.',
+    goal: 'Audit the payment gateway API, identify security weaknesses, and produce a CVE remediation playbook.',
     budget: 18.00,
   },
   {
@@ -93,225 +363,4 @@ export const PRESET_MISSIONS = [
   },
 ];
 
-/**
- * Decomposes a user goal into discrete worker agent contracts
- */
-export function planMissionTasks(missionId: string, goal: string): TaskContract[] {
-  const isSecurity = goal.toLowerCase().includes('security') || goal.toLowerCase().includes('audit') || goal.toLowerCase().includes('gateway');
-  const isPricing = goal.toLowerCase().includes('pricing') || goal.toLowerCase().includes('market') || goal.toLowerCase().includes('competitor');
 
-  if (isSecurity) {
-    return [
-      {
-        id: `TSK-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
-        missionId,
-        title: 'Endpoint Vulnerability & Surface Discovery',
-        description: 'Map REST & GraphQL attack surfaces, headers, and rate-limiting thresholds.',
-        assignedAgentId: 'agent_nova',
-        assignedAgentName: 'Agent Nova',
-        assignedAgentEmail: 'nova.data@payagent.sandbox',
-        budget: 3.50,
-        status: 'pending',
-        acceptanceCriteria: [
-          'Identify top 5 API endpoint vulnerabilities (OWASP API Top 10)',
-          'Extract schema entropy and signature vectors',
-          'Output structured JSON endpoint matrix',
-        ],
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: `TSK-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
-        missionId,
-        title: 'Cryptographic Auth & Token Expiry Audit',
-        description: 'Deep audit of OAuth2 token exchange, webhook signatures, and replay attack protection.',
-        assignedAgentId: 'agent_cipher',
-        assignedAgentName: 'Agent Cipher',
-        assignedAgentEmail: 'cipher.sec@payagent.sandbox',
-        budget: 6.00,
-        status: 'pending',
-        acceptanceCriteria: [
-          'Verify HMAC-SHA256 signature verification code',
-          'Audit token TTL and refresh token rotation logic',
-          'Demonstrate zero-trust mitigation for MITM vectors',
-        ],
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: `TSK-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
-        missionId,
-        title: 'Executive Remediation Playbook & Settlement Dossier',
-        description: 'Synthesize findings into executive risk scores, CVE classifications, and PR-ready code diffs.',
-        assignedAgentId: 'agent_synthex',
-        assignedAgentName: 'Agent Synthex',
-        assignedAgentEmail: 'synthex.write@payagent.sandbox',
-        budget: 4.50,
-        status: 'pending',
-        acceptanceCriteria: [
-          'Complete executive summary with CVSS v3.1 scoring',
-          'Actionable TypeScript / Python code patches',
-          'Complies with ISO 27001 & PCI-DSS 4.0 guidelines',
-        ],
-        createdAt: new Date().toISOString(),
-      },
-    ];
-  } else if (isPricing) {
-    return [
-      {
-        id: `TSK-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
-        missionId,
-        title: 'Multi-Tenant Competitor Data Scraping',
-        description: 'Extract pricing tiers, API limits, and add-on structures across 6 industry competitors.',
-        assignedAgentId: 'agent_nova',
-        assignedAgentName: 'Agent Nova',
-        assignedAgentEmail: 'nova.data@payagent.sandbox',
-        budget: 3.50,
-        status: 'pending',
-        acceptanceCriteria: [
-          'Scrape minimum 6 competitor pricing matrices',
-          'Normalize per-seat, usage-based, and flat pricing',
-          'Export validated JSON dataset',
-        ],
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: `TSK-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
-        missionId,
-        title: 'Price Elasticity & Margins Quant Modeling',
-        description: 'Calculate churn sensitivity curves and identify margin arbitrage opportunities.',
-        assignedAgentId: 'agent_metric',
-        assignedAgentName: 'Agent Metric',
-        assignedAgentEmail: 'metric.quant@payagent.sandbox',
-        budget: 4.00,
-        status: 'pending',
-        acceptanceCriteria: [
-          'Generate revenue elasticity curve model',
-          'Identify underserved price point sweet spots',
-          'Provide expected ARR impact projections',
-        ],
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: `TSK-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
-        missionId,
-        title: 'Strategic GTM Pricing Architecture Dossier',
-        description: 'Draft the commercial strategy document and product packaging recommendations.',
-        assignedAgentId: 'agent_synthex',
-        assignedAgentName: 'Agent Synthex',
-        assignedAgentEmail: 'synthex.write@payagent.sandbox',
-        budget: 4.50,
-        status: 'pending',
-        acceptanceCriteria: [
-          'Provide 3-tier recommended packaging breakdown',
-          'Include customer persona willingness-to-pay analysis',
-          'Ready-to-present executive deck markdown',
-        ],
-        createdAt: new Date().toISOString(),
-      },
-    ];
-  } else {
-    // Default Agent-to-Agent Commerce Mission
-    return [
-      {
-        id: `TSK-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
-        missionId,
-        title: 'Agentic Protocol & Escrow Flow Research',
-        description: 'Benchmark state machine patterns for two-party autonomous transaction settlement.',
-        assignedAgentId: 'agent_nova',
-        assignedAgentName: 'Agent Nova',
-        assignedAgentEmail: 'nova.data@payagent.sandbox',
-        budget: 3.50,
-        status: 'pending',
-        acceptanceCriteria: [
-          'Analyze decentralized escrow state machines',
-          'Benchmark PayPal Payouts batching throughput',
-          'Document gas vs fiat latency trade-offs',
-        ],
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: `TSK-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
-        missionId,
-        title: 'Autonomous Settlement Smart Contract & Gateway Verification',
-        description: 'Verify conditional payment triggers and programmatic escrow unlock safety.',
-        assignedAgentId: 'agent_cipher',
-        assignedAgentName: 'Agent Cipher',
-        assignedAgentEmail: 'cipher.sec@payagent.sandbox',
-        budget: 6.00,
-        status: 'pending',
-        acceptanceCriteria: [
-          'Audit automated escrow release signatures',
-          'Test rejection on failed acceptance criteria',
-          'Verify human-in-the-loop spending caps',
-        ],
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: `TSK-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
-        missionId,
-        title: 'PayAgent Protocol Specification & Whitepaper',
-        description: 'Complete technical specification document for autonomous agent commerce.',
-        assignedAgentId: 'agent_synthex',
-        assignedAgentName: 'Agent Synthex',
-        assignedAgentEmail: 'synthex.write@payagent.sandbox',
-        budget: 4.50,
-        status: 'pending',
-        acceptanceCriteria: [
-          'Full RFC-style protocol specification',
-          'Sequence diagrams and API payload schemas',
-          'Production security & compliance review',
-        ],
-        createdAt: new Date().toISOString(),
-      },
-    ];
-  }
-}
-
-/**
- * Generate synthetic high-quality agent deliverable
- */
-export function generateSyntheticDeliverable(task: TaskContract): Deliverable {
-  const isSecurity = task.title.toLowerCase().includes('vulnerability') || task.title.toLowerCase().includes('cryptographic') || task.title.toLowerCase().includes('audit');
-  
-  if (isSecurity) {
-    return {
-      summary: `Completed thorough inspection for "${task.title}". Identified 3 core vectors and supplied verified patch diffs.`,
-      content: `### 🛡️ Audit Report: ${task.title}\n\n` +
-        `**Status**: PASSED ACCEPTANCE CRITERIA\n\n` +
-        `#### Key Findings:\n` +
-        `1. **OWASP API3:2023 Broken Object Property Level Authorization**: Authorization checks were missing on secondary query projections.\n` +
-        `2. **PayPal Webhook Verification**: Webhooks lacked check for 'PAYPAL-AUTH-ALGO' replay windows.\n` +
-        `3. **Rate Limiting**: Added sliding-window limiter on checkout initialization.\n\n` +
-        `\`\`\`typescript\n` +
-        `// Remediation Patch Applied:\n` +
-        `export function verifyPayPalWebhookSignature(req: Request, webhookId: string) {\n` +
-        `  const certUrl = req.headers.get('paypal-cert-url');\n` +
-        `  if (!certUrl?.startsWith('https://api.paypal.com/')) throw new Error('Untrusted Cert Source');\n` +
-        `  // Escrow authorization safely verified\n` +
-        `  return true;\n` +
-        `}\n` +
-        `\`\`\`\n\n` +
-        `*Artifact Hash: sha256:${Math.random().toString(36).substring(2, 10)}${Math.random().toString(36).substring(2, 10)}*`,
-      executionTimeMs: 1420,
-      qualityScore: 97,
-      evaluatorFeedback: 'JudgeLex QA: All 3 acceptance criteria met with full cryptographic verification. Release of PayPal Escrow approved.',
-      verifiedAt: new Date().toISOString(),
-    };
-  } else {
-    return {
-      summary: `Completed data synthesis and analysis for "${task.title}". All acceptance criteria verified by JudgeLex.`,
-      content: `### 📊 Analytical Deliverable: ${task.title}\n\n` +
-        `**Deliverable Specification**: Complete dataset and strategic breakdown generated.\n\n` +
-        `| Metric | Industry Benchmark | PayAgent Observed | Delta |\n` +
-        `| :--- | :--- | :--- | :--- |\n` +
-        `| Settlement Latency | 48-72 hrs (Wire/ACH) | < 1.2s (PayPal Payouts) | -99.9% |\n` +
-        `| Escrow Hold Fee | 2.5% - 5.0% | 0.0% (Native Auth) | -100% |\n` +
-        `| Agent Trust Score | N/A | 98.4 / 100 | +Verified |\n\n` +
-        `#### Strategic Recommendation:\n` +
-        `Automated micro-settlement via PayPal Payouts unlocks instantaneous agent-to-agent procurement with zero credit risk, secured by upstream authorization holds.`,
-      executionTimeMs: 1850,
-      qualityScore: 95,
-      evaluatorFeedback: 'JudgeLex QA: Deliverable validated against specifications. Code and data structures intact. Payment authorized.',
-      verifiedAt: new Date().toISOString(),
-    };
-  }
-}

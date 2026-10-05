@@ -13,7 +13,7 @@ export const DeliverableModal: React.FC<DeliverableModalProps> = ({ task, onClos
   if (!task) return null;
 
   const deliverable = task.deliverable;
-  const isPaid = task.status === 'paid';
+  const isPaid = task.status === 'paid' || task.status === 'settled';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">

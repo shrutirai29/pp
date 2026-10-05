@@ -13,7 +13,7 @@ export const EscrowVaultSummary: React.FC<EscrowVaultSummaryProps> = ({ mission 
   const paid = mission?.escrowPaidTotal || 0;
   const locked = Math.max(0, authorized - paid);
   const totalTasks = mission?.tasks.length || 0;
-  const completedTasks = mission?.tasks.filter(t => t.status === 'paid').length || 0;
+  const completedTasks = mission?.tasks.filter(t => t.status === 'paid' || t.status === 'settled').length || 0;
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
