@@ -16,7 +16,8 @@ import {
   XCircle,
   Truck,
   Building2,
-  Key
+  Key,
+  ExternalLink
 } from 'lucide-react';
 
 interface PayPalCheckoutModalProps {
@@ -304,6 +305,20 @@ export const PayPalCheckoutModal: React.FC<PayPalCheckoutModalProps> = ({
               In a full popup flow, PayPal Sandbox credentials authenticate the buyer. Click below to simulate buyer
               confirmation and instruct the backend to authoritatively capture funds.
             </p>
+
+            {orderData.approvalUrl && (
+              <div className="pt-1">
+                <a
+                  href={orderData.approvalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 underline font-medium"
+                >
+                  <span>Open PayPal Sandbox Approval Window</span>
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              </div>
+            )}
 
             <div className="flex items-center gap-3 pt-1">
               <Button

@@ -3,7 +3,7 @@ import request from 'supertest';
 import { DatabaseSync } from '../src/db/sqliteAdapter.js';
 import { initDatabase } from '../src/db/database.js';
 import { createApp } from '../src/app.js';
-import { EnvConfig } from '../src/config/env.js';
+import { EnvConfig, EnvSchema } from '../src/config/env.js';
 import { UserIntent, FinalDeal } from '../src/schemas/dealSchemas.js';
 import { PayPalClient, PayPalOrderParams, HttpPayPalClient } from '../src/services/paypalClient.js';
 
@@ -697,5 +697,144 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     expect(res.body.success).toBe(false);
     expect(res.body.error).toMatch(/terms were (modified|altered)/i);
+  });
+
+  // 25. GET /api/deals lists only deals belonging to the authenticated user
+  it("25. GET /api/deals returns only deals owned by the requesting session", async () => {
+    // Alice creates 2 deals
+    await request(app)
+      .post('/api/deals')
+      .set('x-user-id', 'user-alice')
+      .send({ intent: { ...mockIntent, id: 'deal-alice-1' } })
+      .expect(201);
+
+    await request(app)
+      .post('/api/deals')
+      .set('x-user-id', 'user-alice')
+      .send({ intent: { ...mockIntent, id: 'deal-alice-2' } })
+      .expect(201);
+
+    // Bob creates 1 deal
+    await request(app)
+      .post('/api/deals')
+      .set('x-user-id', 'user-bob')
+      .send({ intent: { ...mockIntent, id: 'deal-bob-1' } })
+      .expect(201);
+
+    // Alice requests her deals
+    const aliceRes = await request(app)
+      .get('/api/deals')
+      .set('x-user-id', 'user-alice')
+      .expect(200);
+
+    expect(aliceRes.body.success).toBe(true);
+    expect(aliceRes.body.data).toHaveLength(2);
+    expect(aliceRes.body.data.every((d: any) => d.userId === 'user-alice')).toBe(true);
+
+    // Bob requests his deals
+    const bobRes = await request(app)
+      .get('/api/deals')
+      .set('x-user-id', 'user-bob')
+      .expect(200);
+
+    expect(bobRes.body.success).toBe(true);
+    expect(bobRes.body.data).toHaveLength(1);
+    expect(bobRes.body.data[0].id).toBe('deal-bob-1');
+  });
+
+  // 26. Re-verifying a deal with modified terms invalidates prior approvals
+  it('26. Re-verifying a deal with modified terms invalidates prior approvals', async () => {
+    const setup = await setupApprovedDeal();
+
+    // Re-verify with a modified final deal (lower price)
+    const modifiedDeal: FinalDeal = {
+      ...mockValidFinalDeal,
+      productPrice: 6500,
+      totalPayable: 6500,
+      totalSaved: 1499,
+    };
+
+    await request(app)
+      .post(`/api/deals/${setup.dealId}/verify`)
+      .set('x-user-id', setup.userId)
+      .send({ finalDeal: modifiedDeal })
+      .expect(200);
+
+    // Check approval status in SQLite: should be INVALIDATED
+    const row = db.prepare('SELECT * FROM approvals WHERE id = ?').get(setup.approval.approvalId) as any;
+    expect(row.status).toBe('INVALIDATED');
+    expect(row.invalidation_reason).toMatch(/modified and re-verified/i);
+  });
+
+  // 27. Checkout rejects mathematically inconsistent totalPayable
+  it('27. Checkout rejects mathematically inconsistent totalPayable', async () => {
+    const setup = await setupApprovedDeal();
+
+    // Corrupt math in final deal
+    const corruptMathDeal: FinalDeal = {
+      ...mockValidFinalDeal,
+      productPrice: 5000,
+      deliveryFee: 500,
+      totalPayable: 7499, // 5000 + 500 != 7499
+    };
+
+    db.prepare('UPDATE deals SET final_deal_json = ? WHERE id = ?').run(
+      JSON.stringify(corruptMathDeal),
+      setup.dealId
+    );
+
+    const res = await request(app)
+      .post(`/api/deals/${setup.dealId}/checkout`)
+      .set('x-user-id', setup.userId)
+      .send({ authorizationToken: setup.authorizationToken })
+      .expect(400);
+
+    expect(res.body.success).toBe(false);
+    expect(res.body.error).toMatch(/mathematically inconsistent/i);
+  });
+
+  // 28. Retrying capture on REQUIRES_RECONCILIATION status reconciles against PayPal
+  it('28. Retrying capture on REQUIRES_RECONCILIATION queries PayPal and completes payment', async () => {
+    const setup = await setupApprovedDeal();
+
+    const checkoutRes = await request(app)
+      .post(`/api/deals/${setup.dealId}/checkout`)
+      .set('x-user-id', setup.userId)
+      .send({ authorizationToken: setup.authorizationToken })
+      .expect(201);
+
+    const orderId = checkoutRes.body.data.paypalOrderId;
+
+    // Simulate payment entering REQUIRES_RECONCILIATION state
+    db.prepare(`
+      UPDATE payments
+      SET status = 'REQUIRES_RECONCILIATION'
+      WHERE paypal_order_id = ?
+    `).run(orderId);
+
+    // Mock PayPal reports completed order
+    mockPayPal.captureReconciled = true;
+
+    const res = await request(app)
+      .post(`/api/deals/${setup.dealId}/capture`)
+      .set('x-user-id', setup.userId)
+      .send({ paypalOrderId: orderId })
+      .expect(200);
+
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.status).toBe('COMPLETED');
+
+    const paymentRow = db.prepare('SELECT * FROM payments WHERE paypal_order_id = ?').get(orderId) as any;
+    expect(paymentRow.status).toBe('COMPLETED');
+  });
+
+  // 29. Rejects production startup if TOKEN_HMAC_SECRET is default demo secret
+  it('29. Rejects configuration if TOKEN_HMAC_SECRET is default in production', () => {
+    const result = EnvSchema.safeParse({
+      NODE_ENV: 'production',
+      TOKEN_HMAC_SECRET: 'dev_insecure_hmac_secret_for_demo_only',
+    });
+
+    expect(result.success).toBe(false);
   });
 });

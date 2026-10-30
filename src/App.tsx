@@ -67,13 +67,21 @@ export function App() {
   const [authorizationToken, setAuthorizationToken] = useState<string | undefined>(undefined);
   const [isServerOnline, setIsServerOnline] = useState<boolean>(false);
 
-  // Poll server health on load
+  // Poll server health on load and synchronize persistent deals
   useEffect(() => {
     let isMounted = true;
     dealmindApi.checkHealth()
       .then((res) => {
         if (isMounted && res && res.status === 'ok') {
           setIsServerOnline(true);
+          // Sync server deals if available
+          dealmindApi.getDeals()
+            .then((srvDealsRes) => {
+              if (isMounted && srvDealsRes.success && Array.isArray(srvDealsRes.data) && srvDealsRes.data.length > 0) {
+                setDeals(srvDealsRes.data);
+              }
+            })
+            .catch(() => {});
         }
       })
       .catch(() => {
@@ -83,6 +91,23 @@ export function App() {
       isMounted = false;
     };
   }, []);
+
+  // Sync server audit trail when viewing audit page
+  useEffect(() => {
+    if (currentView === 'audit' && isServerOnline && activeIntent?.id) {
+      dealmindApi.getAuditTrail(activeIntent.id)
+        .then((res) => {
+          if (res.success && Array.isArray(res.events) && res.events.length > 0) {
+            setAuditEvents((prev) => {
+              const existingIds = new Set(prev.map((e) => e.id));
+              const newServerEvents = res.events.filter((e) => !existingIds.has(e.id));
+              return [...newServerEvents, ...prev];
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [currentView, isServerOnline, activeIntent?.id]);
 
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>(INITIAL_MOCK_AUDIT_EVENTS);
 
@@ -127,7 +152,7 @@ export function App() {
 
     // Create a new Deal record in Dashboard
     const newDeal: Deal = {
-      id: `deal-${Date.now()}`,
+      id: newIntent.id,
       title: `${newIntent.productTitle} (${newIntent.requiredCondition.toUpperCase()})`,
       intent: newIntent,
       status: 'draft',
@@ -163,7 +188,7 @@ export function App() {
   };
 
   // Handler: Select a deal from Dashboard
-  const handleSelectDeal = (deal: Deal) => {
+  const handleSelectDeal = async (deal: Deal) => {
     setActiveIntent(deal.intent);
     const ranked = rankOffers(SAMPLE_OFFERS, deal.intent);
     const rankedOffers = ranked.map((r) => r.offer);
@@ -172,6 +197,32 @@ export function App() {
     // Find first eligible offer or default
     const eligible = rankedOffers.find((o) => o.eligibilityStatus === 'eligible') || rankedOffers[0];
     setSelectedOffer(eligible);
+
+    // If server is online, fetch authoritative persisted record
+    if (isServerOnline) {
+      try {
+        const res = await dealmindApi.getDeal(deal.id);
+        if (res.success && res.data) {
+          const srv = res.data;
+          if (srv.finalDeal) {
+            setFinalDeal(srv.finalDeal);
+          }
+          if (srv.latestVerification) {
+            setVerificationReport(srv.latestVerification);
+          }
+          if (srv.latestApproval) {
+            setApprovalRecord(srv.latestApproval);
+          } else {
+            setApprovalRecord(null);
+          }
+          setAuthorizationToken(undefined);
+          setCurrentView('workspace');
+          return;
+        }
+      } catch (err) {
+        console.warn('Could not fetch deal from server, deriving locally:', err);
+      }
+    }
 
     const neg = runIntelligentNegotiation(deal.intent, eligible, rankedOffers);
     setNegotiationResult(neg);
@@ -454,10 +505,10 @@ export function App() {
     // 1. Update deal status
     setDeals((prev) =>
       prev.map((d) => {
-        if (d.intent.id === activeIntent.id || d.id === 'deal-001') {
+        if (d.intent.id === activeIntent.id || d.id === activeIntent.id || d.id === 'deal-001') {
           return {
             ...d,
-            status: 'verified', // keeps verified visual state with paid completion
+            status: 'payment_completed',
             updatedAt: new Date().toISOString(),
           };
         }

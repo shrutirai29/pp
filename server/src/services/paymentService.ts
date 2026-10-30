@@ -63,6 +63,33 @@ export class PaymentService {
       );
     }
 
+    // Defensive check: deal must be agreed and accepted by seller
+    if (!deal.finalDeal.isAcceptedBySeller || deal.finalDeal.negotiationStatus !== 'agreed') {
+      throw new PaymentSecurityError(400, 'Cannot checkout deal: Negotiation status is not agreed or accepted by seller.');
+    }
+
+    // Defensive check: currency match
+    if (deal.finalDeal.currency !== deal.intent.currency) {
+      throw new PaymentSecurityError(400, 'Currency mismatch between authorized intent and final deal.');
+    }
+
+    // Defensive check: totalPayable mathematical consistency
+    const calculatedTotal =
+      Number(deal.finalDeal.productPrice) +
+      Number(deal.finalDeal.deliveryFee || 0) +
+      Number(deal.finalDeal.otherCharges || 0);
+    if (Math.abs(calculatedTotal - deal.finalDeal.totalPayable) > 0.001) {
+      throw new PaymentSecurityError(
+        400,
+        'Deal terms are mathematically inconsistent: totalPayable does not match itemized sum.'
+      );
+    }
+
+    // Defensive check: budget limit
+    if (deal.finalDeal.totalPayable > deal.intent.maxBudget) {
+      throw new PaymentSecurityError(400, 'Final payable amount exceeds authorized user budget ceiling.');
+    }
+
     const currentFingerprint = generateServerDealFingerprint(deal.finalDeal);
     if (currentFingerprint !== latestReport.fingerprint) {
       throw new PaymentSecurityError(
@@ -282,6 +309,46 @@ export class PaymentService {
     if (new Date() > new Date(approval.expiresAt)) {
       this.approvalRepo.updateToExpired(approval.id);
       throw new PaymentSecurityError(400, 'Authorization expired prior to capture.');
+    }
+
+    // If payment status was REQUIRES_RECONCILIATION, probe PayPal first
+    if (payment.status === 'REQUIRES_RECONCILIATION') {
+      try {
+        const probe = await this.paypalClient.getOrder(params.paypalOrderId);
+        if (probe.status === 'COMPLETED') {
+          this.approvalRepo.atomicConsumeApproval(approval.id);
+          this.paymentRepo.updateStatus(payment.id, 'COMPLETED', {
+            captureId: probe.captureId,
+            payerEmail: probe.payerEmail,
+            payerId: probe.payerId,
+          });
+          this.dealRepo.updateDealStatus(deal.id, 'payment_completed');
+          this.auditRepo.recordEvent(
+            deal.id,
+            'paypal_payment_completed',
+            'PayPal Sandbox Payment Reconciled & Confirmed',
+            `Reconciliation confirmed completed capture with PayPal. Capture ID: ${probe.captureId}.`,
+            'paypal_gateway',
+            { paypalOrderId: params.paypalOrderId, captureId: probe.captureId }
+          );
+          return {
+            success: true,
+            paymentId: payment.id,
+            status: 'COMPLETED',
+            paypalOrderId: params.paypalOrderId,
+            captureId: probe.captureId,
+            amount: payment.amount,
+            currency: payment.currency,
+            payerEmail: probe.payerEmail,
+            message: 'PayPal Sandbox payment confirmed via reconciliation.',
+          };
+        }
+      } catch {
+        throw new PaymentSecurityError(
+          502,
+          'Network interruption: Unable to reconcile order status with PayPal. Please retry.'
+        );
+      }
     }
 
     // Atomic transition to CAPTURE_PENDING to prevent double captures

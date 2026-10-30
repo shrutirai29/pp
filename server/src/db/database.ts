@@ -98,6 +98,7 @@ export function initDatabase(dbPath: string): DatabaseSync {
     CREATE INDEX IF NOT EXISTS idx_payments_deal_id ON payments(deal_id);
     CREATE INDEX IF NOT EXISTS idx_payments_paypal_order_id ON payments(paypal_order_id);
     CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments(user_id);
+    CREATE INDEX IF NOT EXISTS idx_deals_user_id ON deals(user_id);
   `);
 
   return db;

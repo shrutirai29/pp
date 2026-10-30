@@ -17,11 +17,23 @@ declare global {
  * Ensures that deals, verification reports, and approvals are bound to the owning user/session,
  * preventing cross-session authorization abuse.
  */
-export function authMiddleware(req: Request, _res: Response, next: NextFunction) {
+export function authMiddleware(req: Request, res: Response, next: NextFunction) {
   const headerUserId = req.headers['x-user-id'] || req.headers['x-session-id'];
   const userId = typeof headerUserId === 'string' && headerUserId.trim().length > 0
     ? headerUserId.trim()
-    : 'dev-user-default';
+    : null;
+
+  if (!userId) {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized: Missing x-user-id or session credential.',
+      });
+    }
+    // In dev / test, use development default session
+    req.user = { id: 'dev-user-default' };
+    return next();
+  }
 
   req.user = { id: userId };
   next();

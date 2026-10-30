@@ -21,10 +21,21 @@ export function createApp(
 ): Express {
   const app = express();
 
-  // Explicit CORS configuration
+  // Explicit CORS configuration (allows localhost ports in dev, enforces strict origin in production)
+  const allowedOrigin =
+    config.NODE_ENV === 'production'
+      ? config.CORS_ORIGIN
+      : (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+          if (!origin || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) || origin === config.CORS_ORIGIN) {
+            callback(null, true);
+          } else {
+            callback(null, false);
+          }
+        };
+
   app.use(
     cors({
-      origin: config.CORS_ORIGIN || '*',
+      origin: allowedOrigin,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-session-id'],
       credentials: true,

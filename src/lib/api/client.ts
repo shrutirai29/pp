@@ -111,8 +111,15 @@ export const dealmindApi = {
   /**
    * Retrieve deal from server
    */
-  async getDeal(dealId: string): Promise<{ success: boolean; deal: any }> {
-    return request<{ success: boolean; deal: any }>(`/api/deals/${encodeURIComponent(dealId)}`);
+  async getDeal(dealId: string): Promise<{ success: boolean; data: any }> {
+    return request<{ success: boolean; data: any }>(`/api/deals/${encodeURIComponent(dealId)}`);
+  },
+
+  /**
+   * List deals belonging to current authenticated user
+   */
+  async getDeals(): Promise<{ success: boolean; data: any[] }> {
+    return request<{ success: boolean; data: any[] }>('/api/deals');
   },
 
   /**

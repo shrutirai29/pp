@@ -67,6 +67,24 @@ export class DealRepository {
     };
   }
 
+  public listDealsForUser(userId: string): DealRecord[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM deals WHERE user_id = ? ORDER BY created_at DESC
+    `);
+    const rows = stmt.all(userId) as Record<string, unknown>[];
+
+    return rows.map((row) => ({
+      id: String(row.id),
+      userId: String(row.user_id),
+      title: String(row.title),
+      status: String(row.status),
+      intent: JSON.parse(String(row.intent_json)),
+      finalDeal: row.final_deal_json ? JSON.parse(String(row.final_deal_json)) : null,
+      createdAt: String(row.created_at),
+      updatedAt: String(row.updated_at),
+    }));
+  }
+
   public updateFinalDeal(id: string, finalDeal: FinalDeal): boolean {
     const now = new Date().toISOString();
     const stmt = this.db.prepare(`

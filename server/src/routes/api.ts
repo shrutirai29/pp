@@ -84,6 +84,22 @@ export function createApiRouter(
   });
 
   // ---------------------------------------------------------------------------
+  // 1b. GET /api/deals - List deals for current authenticated user
+  // ---------------------------------------------------------------------------
+  router.get('/deals', (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.user?.id || 'dev-user-default';
+      const deals = dealRepo.listDealsForUser(userId);
+      res.json({
+        success: true,
+        data: deals,
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
   // 2. GET /api/deals/:id - Fetch deal & latest status
   // ---------------------------------------------------------------------------
   router.get('/deals/:id', (req: Request, res: Response, next: NextFunction) => {
@@ -181,6 +197,27 @@ export function createApiRouter(
 
       // Persist verification report
       verifRepo.saveReport(report);
+
+      // Invalidate any existing approval if deal terms/fingerprint changed upon re-verification
+      const existingApproval = approvalRepo.getLatestApprovalForDeal(deal.id);
+      if (
+        existingApproval &&
+        (existingApproval.status === 'PENDING' || existingApproval.status === 'APPROVED') &&
+        existingApproval.fingerprint !== report.dealFingerprint
+      ) {
+        approvalRepo.updateToInvalidated(
+          existingApproval.id,
+          'Deal terms were modified and re-verified. Prior approval invalidated.'
+        );
+        auditRepo.recordEvent(
+          deal.id,
+          'approval_invalidated',
+          'Prior Approval Invalidated by Re-Verification',
+          'Deal was re-verified with altered terms; prior approval record invalidated.',
+          'intentlock_engine',
+          { priorApprovalId: existingApproval.id, newFingerprint: report.dealFingerprint }
+        );
+      }
 
       // Update deal status based on verification result
       const newStatus = report.status === 'VERIFIED' ? 'verified' : 'rejected';
