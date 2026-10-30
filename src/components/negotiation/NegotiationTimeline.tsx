@@ -64,7 +64,7 @@ export const NegotiationTimeline: React.FC<NegotiationTimelineProps> = ({
                 }`}
               >
                 {isAgreed
-                  ? `Negotiation Concluded • Agreement Reached (${roundCount} Rounds)`
+                  ? `Commercial Agreement Reached (${roundCount} Rounds) • Awaiting IntentLock Audit`
                   : `Negotiation Ended • Unsuccessful (${session.finalDeal?.stopReason || 'Rejected'})`}
               </span>
               <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-navy-950 border border-navy-800 text-slate-400">
@@ -77,7 +77,7 @@ export const NegotiationTimeline: React.FC<NegotiationTimelineProps> = ({
             </h2>
             <p className="text-xs text-slate-400">
               {isAgreed
-                ? `DealMind successfully secured price & term concessions through multi-round policy evaluation.`
+                ? `Seller agreed to terms. NOTE: Negotiation acceptance does not equal payment eligibility. IntentLock independent verification is required.`
                 : `DealMind Buyer Agent protected buyer non-negotiables. Negotiation stopped without price convergence.`}
             </p>
           </div>

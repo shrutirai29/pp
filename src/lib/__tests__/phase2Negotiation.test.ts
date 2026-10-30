@@ -432,4 +432,79 @@ describe('Phase 2: Intelligent Buyer Agent and Negotiation Engine', () => {
     expect(ranked[1].offer.id).toBe('cheap-refurb');
     expect(ranked[1].isEligible).toBe(false);
   });
+
+  // Issue A Verification: Buyer does NOT manufacture delivery compliance with Math.min
+  it('Issue A Fix: Buyer opening proposal does NOT manufacture delivery compliance with Math.min', () => {
+    // Seller listing has 4-day delivery, but buyer intent specifies max 3 days
+    const slowerOffer: ProductOffer = {
+      ...baseEligibleOffer,
+      estimatedDeliveryDays: 4,
+    };
+
+    const buyerAgent = new BuyerAgent(mockIntent, slowerOffer, [], 5);
+    const opening = buyerAgent.generateOpeningProposal();
+
+    // Must preserve the seller's actual quoted delivery time of 4 days, NOT arbitrarily clamp to 3!
+    expect(opening.terms.deliveryEstimateDays).toBe(4);
+    expect(opening.messageText).toContain(`fulfillment within ${mockIntent.maxDeliveryDays} days`);
+  });
+
+  // Issue B Verification: Strict recalculation rejects internally inconsistent counteroffer pricing
+  it('Issue B Fix: Buyer strictly recalculates totalPayable and rejects deceptive/inconsistent counteroffers', () => {
+    const buyerAgent = new BuyerAgent(mockIntent, baseEligibleOffer, [], 5);
+
+    // Deceptive counteroffer: states totalPayable is 6500, but productPrice (6500) + deliveryFee (300) = 6800!
+    const deceptiveCounter = {
+      productPrice: 6500,
+      deliveryFee: 300,
+      otherCharges: 0,
+      totalPayable: 6500, // Inconsistent! Should be 6800
+      deliveryEstimateDays: 2,
+      warrantyMonths: 12,
+      hasSubscription: false,
+      condition: 'new' as const,
+    };
+
+    const decision = buyerAgent.evaluateSellerCounter(deceptiveCounter, [], 2);
+
+    expect(decision.action).toBe('reject');
+    expect(decision.rationale).toContain('Internally inconsistent pricing detected');
+    expect(decision.termsHighlights).toContain('Internal Pricing Inconsistency Rejected');
+  });
+
+  // Issue C Verification: IntentLock explicitly rejects any FinalDeal that is unagreed or not accepted by seller
+  it('Issue C Fix: IntentLock explicitly rejects FinalDeal when negotiationStatus is not agreed or isAcceptedBySeller is false', () => {
+    // Unagreed deal resulting from negotiation rejection
+    const unagreedDeal = {
+      dealId: mockIntent.id,
+      originalOfferId: baseEligibleOffer.id,
+      sellerId: 'seller-unagreed',
+      sellerName: 'Unagreed Seller',
+      productTitle: baseEligibleOffer.productTitle,
+      condition: 'new' as const,
+      productPrice: 7000,
+      deliveryFee: 0,
+      otherCharges: 0,
+      totalPayable: 7000,
+      deliveryEstimateDays: 2,
+      warrantyMonths: 12,
+      hasSubscription: false,
+      negotiationStatus: 'rejected' as const, // NOT agreed!
+      roundCount: 3,
+      messages: [],
+      isAcceptedBySeller: false, // NOT accepted!
+      currency: 'INR' as const,
+      totalSaved: 0,
+      stopReason: 'seller_rejected' as const,
+    };
+
+    const report = verifyDealWithIntentLock(mockIntent, unagreedDeal);
+
+    // IntentLock MUST reject this unagreed deal
+    expect(report.status).toBe('rejected');
+    const agreementCheck = report.checks.find((c) => c.id === 'chk-negotiation-acceptance');
+    expect(agreementCheck).toBeDefined();
+    expect(agreementCheck?.status).toBe('failed');
+    expect(agreementCheck?.details).toContain('IntentLock explicitly rejects unagreed or non-accepted deals');
+  });
 });

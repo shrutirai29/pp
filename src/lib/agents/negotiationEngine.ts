@@ -266,7 +266,11 @@ export class NegotiationEngine {
     };
 
     const initialTotal = this.offer.totalPrice;
-    const finalTotal = terms.totalPayable;
+    const finalProductPrice = Number(terms.productPrice);
+    const finalDeliveryFee = Number(terms.deliveryFee || 0);
+    const finalOtherCharges = Number(terms.otherCharges || 0);
+    // Strict invariant: totalPayable strictly calculated from itemized components
+    const finalTotal = finalProductPrice + finalDeliveryFee + finalOtherCharges;
     const totalSaved = this.isAgreed ? Math.max(0, initialTotal - finalTotal) : 0;
 
     const negotiationStatus = this.isAgreed 
@@ -280,11 +284,11 @@ export class NegotiationEngine {
       sellerName: this.offer.sellerName,
       productTitle: this.offer.productTitle,
       condition: terms.condition,
-      productPrice: terms.productPrice,
-      deliveryFee: terms.deliveryFee,
-      otherCharges: terms.otherCharges,
+      productPrice: finalProductPrice,
+      deliveryFee: finalDeliveryFee,
+      otherCharges: finalOtherCharges,
       otherChargesDescription: this.offer.otherChargesDescription,
-      totalPayable: terms.totalPayable,
+      totalPayable: finalTotal,
       deliveryEstimateDays: terms.deliveryEstimateDays,
       warrantyMonths: terms.warrantyMonths,
       hasSubscription: terms.hasSubscription,
@@ -306,8 +310,8 @@ export class NegotiationEngine {
       offerId: this.offer.id,
       sellerName: this.offer.sellerName,
       initialPrice: initialTotal,
-      currentOfferPrice: terms.totalPayable,
-      finalPrice: this.isAgreed ? terms.totalPayable : undefined,
+      currentOfferPrice: finalTotal,
+      finalPrice: this.isAgreed ? finalTotal : undefined,
       currency: this.intent.currency,
       totalSaved,
       status: this.isAgreed ? 'agreed' : 'rejected',

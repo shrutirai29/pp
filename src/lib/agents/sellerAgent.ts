@@ -26,14 +26,15 @@ export class SellerAgent {
   constructor(policy: SellerPolicy) {
     this.policy = policy;
     this.currentAskPrice = policy.startingPrice;
-    this.deliveryFee = policy.deliveryFee;
-    this.otherCharges = policy.otherCharges;
+    this.deliveryFee = Number(policy.deliveryFee || 0);
+    this.otherCharges = Number(policy.otherCharges || 0);
     this.warrantyMonths = policy.warrantyMonths;
     this.deliveryDays = policy.deliveryOptions.standardDays;
   }
 
   /**
    * Responds to a proposal from the Buyer Agent.
+   * Enforces Issue B: Strict recalculation of itemized totalPayable.
    */
   public evaluateBuyerProposal(
     buyerTerms: NegotiationTerms,
@@ -158,7 +159,7 @@ export class SellerAgent {
         const terms = this.buildTerms(this.currentAskPrice);
 
         const concessionStr = nonPriceConcessionMade
-          ? ` We have waived our ₹200 shipping fee and extended warranty to ${this.warrantyMonths} months.`
+          ? ` We have waived our shipping fee and extended warranty to ${this.warrantyMonths} months.`
           : '';
 
         return {
@@ -221,14 +222,17 @@ export class SellerAgent {
   }
 
   /**
-   * Helper to construct complete NegotiationTerms including itemized charges.
+   * Helper to construct complete NegotiationTerms enforcing strict mathematical invariant:
+   * totalPayable = productPrice + deliveryFee + otherCharges
    */
   private buildTerms(price: number): NegotiationTerms {
-    const totalPayable = price + this.deliveryFee + this.otherCharges;
+    const fee = Number(this.deliveryFee || 0);
+    const charges = Number(this.otherCharges || 0);
+    const totalPayable = price + fee + charges;
     return {
       productPrice: price,
-      deliveryFee: this.deliveryFee,
-      otherCharges: this.otherCharges,
+      deliveryFee: fee,
+      otherCharges: charges,
       totalPayable,
       deliveryEstimateDays: this.deliveryDays,
       warrantyMonths: this.warrantyMonths,

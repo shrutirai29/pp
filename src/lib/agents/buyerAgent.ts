@@ -37,6 +37,9 @@ export class BuyerAgent {
 
   /**
    * Generates the opening proposal for Round 1.
+   * FIX ISSUE A: Does not manufacture deliveryEstimateDays with Math.min().
+   * Reflects seller's actual listing delivery timeline while requesting adherence to buyer ceiling.
+   * FIX ISSUE B: Enforces strict mathematical invariant totalPayable = productPrice + deliveryFee + otherCharges.
    */
   public generateOpeningProposal(): BuyerDecision {
     const { openingBasePrice, rationale } = calculateOpeningBuyerBid(
@@ -45,16 +48,20 @@ export class BuyerAgent {
       this.competingOffers
     );
 
-    const deliveryFee = this.offer.deliveryFee;
-    const otherCharges = this.offer.otherCharges;
+    const deliveryFee = Number(this.offer.deliveryFee || 0);
+    const otherCharges = Number(this.offer.otherCharges || 0);
+    // Strict recalculation of total
     const totalPayable = openingBasePrice + deliveryFee + otherCharges;
+
+    // Issue A Fix: Use seller's actual estimated delivery timeline, do not manufacture one with Math.min!
+    const sellerListingDeliveryDays = this.offer.estimatedDeliveryDays;
 
     const terms: NegotiationTerms = {
       productPrice: openingBasePrice,
       deliveryFee,
       otherCharges,
       totalPayable,
-      deliveryEstimateDays: Math.min(this.offer.estimatedDeliveryDays, this.intent.maxDeliveryDays),
+      deliveryEstimateDays: sellerListingDeliveryDays,
       warrantyMonths: this.offer.warrantyMonths ?? this.intent.requiredWarrantyMonths,
       hasSubscription: false,
       condition: this.intent.requiredCondition === 'any' ? this.offer.condition : this.intent.requiredCondition,
@@ -63,11 +70,11 @@ export class BuyerAgent {
     const highlights = [
       `Target Base: ${formatCurrency(openingBasePrice, this.intent.currency)}`,
       `Total Payable: ${formatCurrency(totalPayable, this.intent.currency)}`,
-      `Delivery ≤ ${terms.deliveryEstimateDays} days`,
+      `Requested Delivery: ≤ ${this.intent.maxDeliveryDays} days (Quoted: ${sellerListingDeliveryDays}d)`,
       'Immediate payment guarantee',
     ];
 
-    const messageText = `Greetings ${this.offer.sellerName} sales desk. On behalf of our buyer, we propose an immediate settlement for "${this.offer.productTitle}" at ${formatCurrency(openingBasePrice, this.intent.currency)} (Total payable: ${formatCurrency(totalPayable, this.intent.currency)}). All non-negotiable buyer conditions apply: factory new condition, delivery within ${terms.deliveryEstimateDays} days, and zero recurring subscriptions.`;
+    const messageText = `Greetings ${this.offer.sellerName} sales desk. On behalf of our buyer, we propose an immediate settlement for "${this.offer.productTitle}" at ${formatCurrency(openingBasePrice, this.intent.currency)} (Total payable: ${formatCurrency(totalPayable, this.intent.currency)}). All non-negotiable buyer conditions apply: factory new condition, fulfillment within ${this.intent.maxDeliveryDays} days, and zero recurring subscriptions.`;
 
     return {
       action: 'propose',
@@ -80,12 +87,31 @@ export class BuyerAgent {
 
   /**
    * Evaluates a counteroffer received from the Seller Agent.
+   * FIX ISSUE B: Strictly recalculates itemized sum and rejects internally inconsistent proposals.
+   * FIX ISSUE A: Inspects seller's actual counter deliveryEstimateDays without manufacturing compliance.
    */
   public evaluateSellerCounter(
     sellerTerms: NegotiationTerms,
     history: NegotiationMessage[],
     currentRound: number
   ): BuyerDecision {
+    // -------------------------------------------------------------------------
+    // ISSUE B: STRICT TOTAL RECALCULATION & INCONSISTENCY GUARD
+    // Independently calculate productPrice + deliveryFee + otherCharges
+    // and reject any internally inconsistent or deceptive offer immediately.
+    // -------------------------------------------------------------------------
+    const computedTotal = Number(sellerTerms.productPrice) + Number(sellerTerms.deliveryFee || 0) + Number(sellerTerms.otherCharges || 0);
+    if (Math.abs(sellerTerms.totalPayable - computedTotal) > 0.001) {
+      const rationale = `Internally inconsistent pricing detected: Stated totalPayable (${sellerTerms.totalPayable}) does not match itemized sum: productPrice (${sellerTerms.productPrice}) + deliveryFee (${sellerTerms.deliveryFee}) + otherCharges (${sellerTerms.otherCharges}) = ${computedTotal}.`;
+      return {
+        action: 'reject',
+        terms: sellerTerms,
+        rationale,
+        messageText: `Negotiation aborted due to invalid counteroffer terms. The stated total (${formatCurrency(sellerTerms.totalPayable, this.intent.currency)}) differs from the itemized sum of charges (${formatCurrency(computedTotal, this.intent.currency)}).`,
+        termsHighlights: ['Internal Pricing Inconsistency Rejected'],
+      };
+    }
+
     // -------------------------------------------------------------------------
     // CRITICAL HARD-CONSTRAINT VERIFICATION
     // The buyer agent must NEVER accept or trade away hard constraints!
@@ -116,7 +142,7 @@ export class BuyerAgent {
       };
     }
 
-    // 3. Delivery Cutoff Check
+    // 3. Delivery Cutoff Check (Issue A: Evaluates seller's genuine delivery timeline)
     if (sellerTerms.deliveryEstimateDays > this.intent.maxDeliveryDays) {
       const rationale = `Hard constraint breach: Estimated delivery of ${sellerTerms.deliveryEstimateDays} days exceeds buyer maximum limit of ${this.intent.maxDeliveryDays} days.`;
       return {
@@ -129,7 +155,7 @@ export class BuyerAgent {
     }
 
     // 4. Budget Ceiling Check
-    const totalPayable = sellerTerms.totalPayable;
+    const totalPayable = computedTotal;
     if (totalPayable > this.intent.maxBudget) {
       // If round limit is reached and seller is still over budget, we must reject
       if (currentRound >= this.maxRounds) {
@@ -167,7 +193,10 @@ export class BuyerAgent {
 
       return {
         action: 'accept',
-        terms: sellerTerms,
+        terms: {
+          ...sellerTerms,
+          totalPayable: computedTotal,
+        },
         rationale,
         messageText: `Offer accepted. The proposed terms (${formatCurrency(sellerTerms.productPrice, this.intent.currency)} product price, ${sellerTerms.deliveryFee === 0 ? 'Free Delivery' : formatCurrency(sellerTerms.deliveryFee, this.intent.currency) + ' shipping'}, total ${formatCurrency(totalPayable, this.intent.currency)}) comply fully with our buyer's requirements. We lock these terms for IntentLock verification.`,
         termsHighlights: [
@@ -201,8 +230,8 @@ export class BuyerAgent {
       this.maxRounds
     );
 
-    const counterDelivery = sellerTerms.deliveryFee;
-    const counterCharges = sellerTerms.otherCharges;
+    const counterDelivery = Number(sellerTerms.deliveryFee || 0);
+    const counterCharges = Number(sellerTerms.otherCharges || 0);
     const counterTotal = nextBid + counterDelivery + counterCharges;
 
     // Strict guard: ensure next counter NEVER exceeds budget
@@ -213,6 +242,8 @@ export class BuyerAgent {
       const adjustedTerms: NegotiationTerms = {
         ...sellerTerms,
         productPrice: adjustedNextBid,
+        deliveryFee: counterDelivery,
+        otherCharges: counterCharges,
         totalPayable: adjustedTotal,
       };
 
@@ -231,6 +262,8 @@ export class BuyerAgent {
     const nextTerms: NegotiationTerms = {
       ...sellerTerms,
       productPrice: nextBid,
+      deliveryFee: counterDelivery,
+      otherCharges: counterCharges,
       totalPayable: counterTotal,
     };
 

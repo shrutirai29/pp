@@ -47,6 +47,26 @@ export function verifyDealWithIntentLock(
 
   const checks: VerificationCheck[] = [];
 
+  // Check 0: Negotiation Agreement & Bilateral Acceptance Gate (Issue C)
+  // IntentLock explicitly rejects any FinalDeal whose negotiation status is not 'agreed'
+  // or whose seller acceptance flag is false.
+  if (isFinalDeal) {
+    const isAccepted = offerOrDeal.negotiationStatus === 'agreed' && offerOrDeal.isAcceptedBySeller === true;
+    checks.push({
+      id: 'chk-negotiation-acceptance',
+      name: 'Negotiation Agreement & Bilateral Acceptance Gate',
+      category: 'fees',
+      status: isAccepted ? 'passed' : 'failed',
+      isHardConstraint: true,
+      expected: 'Binding bilateral agreement reached (status: agreed, isAcceptedBySeller: true)',
+      actual: `Status: ${offerOrDeal.negotiationStatus}, isAcceptedBySeller: ${offerOrDeal.isAcceptedBySeller}`,
+      details: isAccepted
+        ? 'Deal was formally agreed upon by both buyer and seller agents within the negotiation protocol.'
+        : `IntentLock explicitly rejects unagreed or non-accepted deals (Stop reason: ${offerOrDeal.stopReason}). Negotiation acceptance is a prerequisite for IntentLock, but does not substitute for independent security verification.`,
+      suggestedRemedy: isAccepted ? undefined : 'Return to negotiation to reach a mutual agreement or choose another seller.',
+    });
+  }
+
   // Check 1: Budget Ceiling
   const isBudgetOk = activePrice <= intent.maxBudget;
   checks.push({
