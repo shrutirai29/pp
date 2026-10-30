@@ -23,6 +23,7 @@ interface NegotiationTimelineProps {
   session: NegotiationSession;
   engineMode?: 'live_llm' | 'mock_llm' | 'deterministic_fallback';
   providerName?: string;
+  isNegotiating?: boolean;
   onProceedToVerification: () => void;
   onBackToWorkspace: () => void;
   onReRunNegotiation?: () => void;
@@ -32,6 +33,7 @@ export const NegotiationTimeline: React.FC<NegotiationTimelineProps> = ({
   session,
   engineMode,
   providerName,
+  isNegotiating,
   onProceedToVerification,
   onBackToWorkspace,
   onReRunNegotiation,
@@ -148,7 +150,8 @@ export const NegotiationTimeline: React.FC<NegotiationTimelineProps> = ({
             {onReRunNegotiation && (
               <button
                 onClick={onReRunNegotiation}
-                className="text-xs text-electric-400 hover:text-electric-300 underline"
+                disabled={isNegotiating}
+                className="text-xs text-electric-400 hover:text-electric-300 underline disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Re-Run Simulation
               </button>
@@ -158,6 +161,18 @@ export const NegotiationTimeline: React.FC<NegotiationTimelineProps> = ({
 
         {/* Message Stream */}
         <div className="space-y-4">
+          {isNegotiating && (
+            <div className="rounded-xl border border-electric-500/40 bg-navy-950/90 p-5 text-center space-y-2 animate-pulse">
+              <div className="flex items-center justify-center gap-2 text-electric-400 font-semibold text-xs sm:text-sm">
+                <Bot className="h-4 w-4 animate-spin text-electric-400" />
+                <span>Autonomous Dialogue in Progress...</span>
+              </div>
+              <p className="text-xs text-slate-300 max-w-md mx-auto">
+                DealMind AI Buyer Agent and {session.sellerName} AI Sales Desk are negotiating price concessions, fulfillment timelines, and warranties across up to 5 rounds.
+              </p>
+            </div>
+          )}
+
           {session.messages.map((msg) => {
             const isBuyer = msg.sender === 'buyer_agent';
             const isSystem = msg.sender === 'system';
@@ -365,7 +380,7 @@ export const NegotiationTimeline: React.FC<NegotiationTimelineProps> = ({
         <div className="rounded-lg bg-navy-950/70 p-3 border border-navy-800/70 flex items-start gap-2 text-xs text-slate-400">
           <Info className="h-4 w-4 shrink-0 text-slate-500 mt-0.5" />
           <span>
-            <strong>Simulated Seller Agent Policy:</strong> Sellers negotiate using private reservation prices and behavior profiles (Flexible, Strict, Conditional). DealMind does not connect to live retail APIs in Phase 2.
+            <strong>Simulated Seller Agent Policy:</strong> Sellers negotiate using private reservation prices and behavior profiles (Flexible, Strict, Conditional). DealMind does not connect to live external merchant APIs.
           </span>
         </div>
       </div>
@@ -377,7 +392,12 @@ export const NegotiationTimeline: React.FC<NegotiationTimelineProps> = ({
         </Button>
 
         <div className="flex items-center gap-3 w-full sm:w-auto">
-          {isAgreed ? (
+          {isNegotiating ? (
+            <div className="flex items-center gap-2 text-xs text-electric-400 py-2">
+              <Bot className="h-4 w-4 animate-spin text-electric-400" />
+              <span>Agents negotiating terms in real time...</span>
+            </div>
+          ) : isAgreed ? (
             <Button
               variant="primary"
               onClick={onProceedToVerification}

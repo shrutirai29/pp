@@ -66,6 +66,7 @@ export function App() {
 
   const [authorizationToken, setAuthorizationToken] = useState<string | undefined>(undefined);
   const [isServerOnline, setIsServerOnline] = useState<boolean>(false);
+  const [isNegotiating, setIsNegotiating] = useState<boolean>(false);
 
   // Poll server health on load and synchronize persistent deals
   useEffect(() => {
@@ -79,6 +80,12 @@ export function App() {
             .then((srvDealsRes) => {
               if (isMounted && srvDealsRes.success && Array.isArray(srvDealsRes.data) && srvDealsRes.data.length > 0) {
                 setDeals(srvDealsRes.data);
+                // Recover previously active deal across browser refresh
+                const savedDealId = localStorage.getItem('dealmind_active_deal_id');
+                const matchedDeal = savedDealId ? srvDealsRes.data.find((d: Deal) => d.id === savedDealId) : srvDealsRes.data[0];
+                if (matchedDeal) {
+                  handleSelectDeal(matchedDeal);
+                }
               }
             })
             .catch(() => {});
@@ -145,9 +152,28 @@ export function App() {
     setApprovalRecord(null);
     setAuthorizationToken(undefined);
 
-    // Sync deal to server asynchronously if online
+    // Sync deal to server asynchronously if online, then rank offers on backend
     dealmindApi.createDeal(newIntent, neg.finalDeal, newIntent.productTitle)
-      .then(() => setIsServerOnline(true))
+      .then(() => {
+        setIsServerOnline(true);
+        dealmindApi.rankOffers(newIntent.id, SAMPLE_OFFERS)
+          .then((rankRes) => {
+            if (rankRes.success && Array.isArray(rankRes.data)) {
+              const enriched = rankRes.data.map((r: any) => {
+                const base = SAMPLE_OFFERS.find((o) => o.id === r.id) || r;
+                return {
+                  ...base,
+                  eligibilityStatus: r.isEligible ? 'eligible' : 'ineligible',
+                  eligibilityReasons: r.ineligibilityReasons || [],
+                  recommendationScore: r.score,
+                  recommendationRank: r.rank,
+                };
+              });
+              setOffers(enriched);
+            }
+          })
+          .catch(() => {});
+      })
       .catch(() => setIsServerOnline(false));
 
     // Create a new Deal record in Dashboard
@@ -160,6 +186,9 @@ export function App() {
       updatedAt: new Date().toISOString(),
     };
     setDeals((prev) => [newDeal, ...prev]);
+    try {
+      localStorage.setItem('dealmind_active_deal_id', newDeal.id);
+    } catch {}
 
     // Record in Audit Trail
     logAuditEvent({
@@ -189,6 +218,9 @@ export function App() {
 
   // Handler: Select a deal from Dashboard
   const handleSelectDeal = async (deal: Deal) => {
+    try {
+      localStorage.setItem('dealmind_active_deal_id', deal.id);
+    } catch {}
     setActiveIntent(deal.intent);
     const ranked = rankOffers(SAMPLE_OFFERS, deal.intent);
     const rankedOffers = ranked.map((r) => r.offer);
@@ -248,6 +280,8 @@ export function App() {
     setSelectedOffer(offer);
     setApprovalRecord(null);
     setAuthorizationToken(undefined);
+    setIsNegotiating(true);
+    setCurrentView('negotiation');
 
     let neg: any;
     if (isServerOnline) {
@@ -269,6 +303,7 @@ export function App() {
     setNegotiationResult(neg);
     setNegotiationSession(neg.session);
     setFinalDeal(neg.finalDeal);
+    setIsNegotiating(false);
 
     // Record audit events
     logAuditEvent({
@@ -317,6 +352,7 @@ export function App() {
     if (!selectedOffer) return;
     setApprovalRecord(null);
     setAuthorizationToken(undefined);
+    setIsNegotiating(true);
 
     let neg: any;
     if (isServerOnline) {
@@ -337,6 +373,7 @@ export function App() {
     setNegotiationResult(neg);
     setNegotiationSession(neg.session);
     setFinalDeal(neg.finalDeal);
+    setIsNegotiating(false);
   };
 
   // Handler: When user proceeds to IntentLock verification from Negotiation view
@@ -625,6 +662,7 @@ export function App() {
             offer={selectedOffer}
             engineMode={negotiationResult?.engineMode}
             providerName={negotiationResult?.providerName}
+            isNegotiating={isNegotiating}
             onProceedToVerification={handleProceedToVerification}
             onBackToWorkspace={() => setCurrentView('workspace')}
             onReRunNegotiation={handleReRunNegotiation}
