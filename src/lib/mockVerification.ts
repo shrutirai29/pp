@@ -1,20 +1,50 @@
 import { UserIntent } from '../types/deal';
 import { ProductOffer } from '../types/offer';
+import { FinalDeal } from '../types/negotiation';
 import { VerificationReport, VerificationCheck, VerificationStatus } from '../types/verification';
 import { calculateTotalPrice } from './dealScoring';
 import { formatCurrency } from './currency';
 
 /**
- * IntentLock Verification Engine (Deterministic Mock Implementation)
- * Evaluates a proposed deal against the buyer's original non-negotiable intent.
- * Note: Demonstration logic only - not production transaction security.
+ * ARCHITECTURAL NOTICE — PHASE 2 INTENTLOCK BOUNDARY:
+ * 
+ * Issue Identified in Phase 1:
+ * In Phase 1, `verifyDealWithIntentLock` accepted `offer: ProductOffer` with an optional detached
+ * `negotiatedFinalPrice?: number`. This meant that while the final price was updated, all non-price
+ * terms (e.g. delivery fee waivers, updated fulfillment days, warranty riders, or condition clauses)
+ * were verified against the original listing rather than the negotiated final agreement.
+ * 
+ * Phase 2 Enhancement:
+ * `verifyDealWithIntentLock` now supports receiving the complete structured `FinalDeal` object.
+ * All checks (budget ceiling, condition, delivery timeframe, recurring subscriptions, fee transparency,
+ * and warranty coverage) are audited against the ACTUAL negotiated terms agreed by the buyer and seller agents.
+ * 
+ * IntentLock remains an independent security gate: buyer agent agreement does NOT auto-verify a deal.
  */
 export function verifyDealWithIntentLock(
   intent: UserIntent,
-  offer: ProductOffer,
+  offerOrDeal: ProductOffer | FinalDeal,
   negotiatedFinalPrice?: number
 ): VerificationReport {
-  const activePrice = negotiatedFinalPrice !== undefined ? negotiatedFinalPrice : calculateTotalPrice(offer);
+  // Discriminate between FinalDeal and ProductOffer
+  const isFinalDeal = 'totalPayable' in offerOrDeal && 'roundCount' in offerOrDeal;
+
+  const activePrice = isFinalDeal
+    ? offerOrDeal.totalPayable
+    : (negotiatedFinalPrice !== undefined ? negotiatedFinalPrice : calculateTotalPrice(offerOrDeal));
+
+  const condition = offerOrDeal.condition;
+  const deliveryDays = isFinalDeal ? offerOrDeal.deliveryEstimateDays : offerOrDeal.estimatedDeliveryDays;
+  const deliveryFee = offerOrDeal.deliveryFee;
+  const otherCharges = offerOrDeal.otherCharges;
+  const otherChargesDescription = offerOrDeal.otherChargesDescription;
+  const hasSubscription = offerOrDeal.hasSubscription;
+  const subscriptionDetails = offerOrDeal.subscriptionDetails;
+  const warrantyMonths = offerOrDeal.warrantyMonths;
+  const sellerName = offerOrDeal.sellerName;
+  const productTitle = offerOrDeal.productTitle;
+  const currency = isFinalDeal ? offerOrDeal.currency : offerOrDeal.currency;
+
   const checks: VerificationCheck[] = [];
 
   // Check 1: Budget Ceiling
@@ -26,7 +56,7 @@ export function verifyDealWithIntentLock(
     status: isBudgetOk ? 'passed' : 'failed',
     isHardConstraint: true,
     expected: `Total payable ≤ ${formatCurrency(intent.maxBudget, intent.currency)}`,
-    actual: `${formatCurrency(activePrice, offer.currency)} (Base + Delivery + Charges)`,
+    actual: `${formatCurrency(activePrice, currency)} (Base + Delivery + Charges)`,
     details: isBudgetOk
       ? `Deal total is within budget by ${formatCurrency(intent.maxBudget - activePrice, intent.currency)}.`
       : `Proposed price exceeds budget ceiling by ${formatCurrency(activePrice - intent.maxBudget, intent.currency)}.`,
@@ -35,7 +65,7 @@ export function verifyDealWithIntentLock(
 
   // Check 2: Product Condition
   let conditionStatus: 'passed' | 'failed' = 'passed';
-  if (intent.requiredCondition === 'new' && offer.condition !== 'new') {
+  if (intent.requiredCondition === 'new' && condition !== 'new') {
     conditionStatus = 'failed';
   }
   checks.push({
@@ -45,15 +75,15 @@ export function verifyDealWithIntentLock(
     status: conditionStatus,
     isHardConstraint: true,
     expected: intent.requiredCondition === 'new' ? 'Strictly Factory New (Unopened)' : 'New or Certified Refurbished',
-    actual: offer.condition.toUpperCase(),
+    actual: condition.toUpperCase(),
     details: conditionStatus === 'passed'
-      ? `Item condition matches buyer requirement (${offer.condition}).`
-      : `Buyer required strictly factory NEW, but seller is providing ${offer.condition}.`,
+      ? `Item condition matches buyer requirement (${condition}).`
+      : `Buyer required strictly factory NEW, but seller is providing ${condition}.`,
     suggestedRemedy: conditionStatus === 'passed' ? undefined : 'Request seller replace item with a genuine factory-new unit.',
   });
 
   // Check 3: Delivery Timeline
-  const isDeliveryOk = offer.estimatedDeliveryDays <= intent.maxDeliveryDays;
+  const isDeliveryOk = deliveryDays <= intent.maxDeliveryDays;
   checks.push({
     id: 'chk-delivery',
     name: 'Fulfillment & Delivery Window',
@@ -61,16 +91,16 @@ export function verifyDealWithIntentLock(
     status: isDeliveryOk ? 'passed' : 'failed',
     isHardConstraint: true,
     expected: `Arrival within ${intent.maxDeliveryDays} calendar days`,
-    actual: `Estimated ${offer.estimatedDeliveryDays} days (${offer.deliveryFee === 0 ? 'Free Shipping' : formatCurrency(offer.deliveryFee, offer.currency)})`,
+    actual: `Estimated ${deliveryDays} days (${deliveryFee === 0 ? 'Free Shipping' : formatCurrency(deliveryFee, currency)})`,
     details: isDeliveryOk
       ? `Delivery schedule fits within buyer's ${intent.maxDeliveryDays}-day window.`
-      : `Delivery of ${offer.estimatedDeliveryDays} days breaches buyer's maximum acceptable limit of ${intent.maxDeliveryDays} days.`,
+      : `Delivery of ${deliveryDays} days breaches buyer's maximum acceptable limit of ${intent.maxDeliveryDays} days.`,
     suggestedRemedy: isDeliveryOk ? undefined : 'Negotiate for express or priority courier dispatch.',
   });
 
   // Check 4: Recurring Charges & Subscriptions
   let subscriptionStatus: 'passed' | 'failed' = 'passed';
-  if (intent.prohibitSubscriptions && offer.hasSubscription) {
+  if (intent.prohibitSubscriptions && hasSubscription) {
     subscriptionStatus = 'failed';
   }
   checks.push({
@@ -80,17 +110,17 @@ export function verifyDealWithIntentLock(
     status: subscriptionStatus,
     isHardConstraint: true,
     expected: 'No recurring subscriptions or hidden memberships',
-    actual: offer.hasSubscription
-      ? `Subscription detected: ${offer.subscriptionDetails || 'Recurring membership'}`
+    actual: hasSubscription
+      ? `Subscription detected: ${subscriptionDetails || 'Recurring membership'}`
       : 'One-time outright purchase. Zero recurring charges.',
     details: subscriptionStatus === 'passed'
       ? 'Clean one-time purchase with no recurring payment mandates.'
-      : `Hard requirement violated: Buyer prohibited subscriptions, but contract attaches "${offer.subscriptionDetails}".`,
+      : `Hard requirement violated: Buyer prohibited subscriptions, but contract attaches "${subscriptionDetails}".`,
     suggestedRemedy: subscriptionStatus === 'passed' ? undefined : 'Negotiate opt-out from auto-renewing subscriptions.',
   });
 
   // Check 5: Fee Transparency
-  const hasHiddenFees = offer.otherCharges > 0 && !offer.otherChargesDescription;
+  const hasHiddenFees = otherCharges > 0 && !otherChargesDescription;
   checks.push({
     id: 'chk-fees',
     name: 'Fee Transparency & Breakdown',
@@ -98,8 +128,8 @@ export function verifyDealWithIntentLock(
     status: hasHiddenFees ? 'failed' : 'passed',
     isHardConstraint: true,
     expected: 'All fees itemized, transparent, and disclosed upfront',
-    actual: offer.otherCharges > 0 
-      ? `Extra charges: ${formatCurrency(offer.otherCharges, offer.currency)} (${offer.otherChargesDescription || 'Unitemized surcharge'})` 
+    actual: otherCharges > 0 
+      ? `Extra charges: ${formatCurrency(otherCharges, currency)} (${otherChargesDescription || 'Unitemized surcharge'})` 
       : 'No ancillary or surcharge fees.',
     details: hasHiddenFees
       ? 'Undisclosed ancillary surcharge detected on bill of materials.'
@@ -114,18 +144,18 @@ export function verifyDealWithIntentLock(
     let warrantyDetails = '';
     let remedy: string | undefined = undefined;
 
-    if (offer.warrantyMonths === null || offer.warrantyMonths === undefined) {
+    if (warrantyMonths === null || warrantyMonths === undefined) {
       warrantyStatus = 'needs_review';
       warrantyActual = 'Unspecified / Missing seller warranty declaration';
-      warrantyDetails = `Buyer requires ${intent.requiredWarrantyMonths} months warranty, but seller listing contains no explicit warranty term. IntentLock flags this as unverified.`;
+      warrantyDetails = `Buyer requires ${intent.requiredWarrantyMonths} months warranty, but contract contains no explicit warranty term. IntentLock flags this as unverified.`;
       remedy = 'Request explicit written warranty guarantee from seller agent.';
-    } else if (offer.warrantyMonths < intent.requiredWarrantyMonths) {
+    } else if (warrantyMonths < intent.requiredWarrantyMonths) {
       warrantyStatus = 'failed';
-      warrantyActual = `${offer.warrantyMonths} months warranty provided`;
-      warrantyDetails = `Warranty period (${offer.warrantyMonths} mo) is shorter than buyer required minimum (${intent.requiredWarrantyMonths} mo).`;
+      warrantyActual = `${warrantyMonths} months warranty provided`;
+      warrantyDetails = `Warranty period (${warrantyMonths} mo) is shorter than buyer required minimum (${intent.requiredWarrantyMonths} mo).`;
       remedy = 'Request seller include extended warranty rider.';
     } else {
-      warrantyActual = `${offer.warrantyMonths} months official warranty included`;
+      warrantyActual = `${warrantyMonths} months official warranty included`;
       warrantyDetails = `Warranty satisfies buyer minimum (${intent.requiredWarrantyMonths} mo).`;
     }
 
@@ -164,11 +194,11 @@ export function verifyDealWithIntentLock(
   return {
     id: `ver-${Date.now()}`,
     dealId: intent.id,
-    offerId: offer.id,
-    offerTitle: offer.productTitle,
-    sellerName: offer.sellerName,
+    offerId: isFinalDeal ? offerOrDeal.originalOfferId : offerOrDeal.id,
+    offerTitle: productTitle,
+    sellerName: sellerName,
     finalPrice: activePrice,
-    currency: offer.currency,
+    currency: currency,
     verifiedAt: new Date().toISOString(),
     status: finalStatus,
     summary,

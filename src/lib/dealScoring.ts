@@ -121,3 +121,27 @@ export function evaluateOfferEligibility(offer: ProductOffer, intent: UserIntent
     score: Math.round(score),
   };
 }
+
+/**
+ * Ranks all offers against the user intent.
+ * Guarantees that:
+ * 1. Eligible offers always outrank ineligible ones.
+ * 2. Ineligible offers are placed at the bottom with 0 score.
+ * 3. The best candidate is chosen from eligible offers based on price savings, reliability, delivery speed, and warranty.
+ */
+export function rankOffers(offers: ProductOffer[], intent: UserIntent): ScoredOffer[] {
+  return offers
+    .map((o) => evaluateOfferEligibility(o, intent))
+    .sort((a, b) => {
+      // Eligible always beats ineligible
+      if (a.isEligible && !b.isEligible) return -1;
+      if (!a.isEligible && b.isEligible) return 1;
+      // If both eligible, sort by score descending
+      if (a.isEligible && b.isEligible) {
+        return b.score - a.score;
+      }
+      // If both ineligible, sort by total price ascending
+      return a.totalPrice - b.totalPrice;
+    });
+}
+

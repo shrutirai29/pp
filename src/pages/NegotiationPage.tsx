@@ -11,6 +11,7 @@ interface NegotiationPageProps {
   offer: ProductOffer;
   onProceedToVerification: () => void;
   onBackToWorkspace: () => void;
+  onReRunNegotiation?: () => void;
 }
 
 export const NegotiationPage: React.FC<NegotiationPageProps> = ({
@@ -18,10 +19,11 @@ export const NegotiationPage: React.FC<NegotiationPageProps> = ({
   intent,
   onProceedToVerification,
   onBackToWorkspace,
+  onReRunNegotiation,
 }) => {
   return (
     <div className="space-y-6">
-      {/* Mini banner for requirements context */}
+      {/* Context banner showing the user's non-negotiable intent */}
       <OriginalRequirementsCard intent={intent} />
 
       {/* Main Negotiation Timeline */}
@@ -29,6 +31,7 @@ export const NegotiationPage: React.FC<NegotiationPageProps> = ({
         session={session}
         onProceedToVerification={onProceedToVerification}
         onBackToWorkspace={onBackToWorkspace}
+        onReRunNegotiation={onReRunNegotiation}
       />
     </div>
   );

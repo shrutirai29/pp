@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { UserIntent, Deal } from './types/deal';
 import { ProductOffer } from './types/offer';
-import { NegotiationSession } from './types/negotiation';
+import { NegotiationSession, FinalDeal } from './types/negotiation';
 import { VerificationReport } from './types/verification';
 import { AuditEvent } from './types/audit';
 
@@ -9,9 +9,9 @@ import { DEFAULT_EXAMPLE_INTENT, MOCK_DASHBOARD_DEALS } from './data/mockProduct
 import { SAMPLE_OFFERS } from './data/mockOffers';
 import { INITIAL_MOCK_AUDIT_EVENTS } from './data/mockAuditEvents';
 
-import { createDeterministicNegotiationSession } from './lib/mockNegotiation';
+import { runIntelligentNegotiation } from './lib/agents/negotiationEngine';
 import { verifyDealWithIntentLock } from './lib/mockVerification';
-import { evaluateOfferEligibility } from './lib/dealScoring';
+import { rankOffers } from './lib/dealScoring';
 
 import { Navbar, NavView } from './components/layout/Navbar';
 import { Footer } from './components/layout/Footer';
@@ -26,18 +26,30 @@ export function App() {
   const [currentView, setCurrentView] = useState<NavView>('dashboard');
   const [deals, setDeals] = useState<Deal[]>(MOCK_DASHBOARD_DEALS);
   const [activeIntent, setActiveIntent] = useState<UserIntent>(DEFAULT_EXAMPLE_INTENT);
+  
+  // Ranked offers based on active intent
   const [offers, setOffers] = useState<ProductOffer[]>(() => {
-    // Score sample offers against default intent
-    return SAMPLE_OFFERS.map((o) => evaluateOfferEligibility(o, DEFAULT_EXAMPLE_INTENT).offer);
+    return rankOffers(SAMPLE_OFFERS, DEFAULT_EXAMPLE_INTENT).map((s) => s.offer);
   });
   
   const [selectedOffer, setSelectedOffer] = useState<ProductOffer | null>(offers[0] || null);
-  const [negotiationSession, setNegotiationSession] = useState<NegotiationSession | null>(() => {
-    return createDeterministicNegotiationSession('deal-001', SAMPLE_OFFERS[0], DEFAULT_EXAMPLE_INTENT);
+  
+  // Initialize with initial negotiation result
+  const [negotiationResult, setNegotiationResult] = useState(() => {
+    return runIntelligentNegotiation(DEFAULT_EXAMPLE_INTENT, SAMPLE_OFFERS[0], SAMPLE_OFFERS);
   });
+
+  const [negotiationSession, setNegotiationSession] = useState<NegotiationSession | null>(
+    negotiationResult.session
+  );
+  const [finalDeal, setFinalDeal] = useState<FinalDeal | null>(
+    negotiationResult.finalDeal
+  );
+
   const [verificationReport, setVerificationReport] = useState<VerificationReport | null>(() => {
-    return verifyDealWithIntentLock(DEFAULT_EXAMPLE_INTENT, SAMPLE_OFFERS[0], 6750);
+    return verifyDealWithIntentLock(DEFAULT_EXAMPLE_INTENT, negotiationResult.finalDeal);
   });
+
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>(INITIAL_MOCK_AUDIT_EVENTS);
 
   // Helper to add audit events
@@ -55,12 +67,20 @@ export function App() {
   const handleIntentSubmit = (newIntent: UserIntent) => {
     setActiveIntent(newIntent);
 
-    // Evaluate sample offers against the new intent
-    const scoredOffers = SAMPLE_OFFERS.map((rawOffer) => {
-      const evaluation = evaluateOfferEligibility(rawOffer, newIntent);
-      return evaluation.offer;
-    });
-    setOffers(scoredOffers);
+    // Evaluate and rank sample offers against the new intent
+    const ranked = rankOffers(SAMPLE_OFFERS, newIntent);
+    const rankedOffers = ranked.map((r) => r.offer);
+    setOffers(rankedOffers);
+
+    // Select the best eligible offer by default
+    const bestEligible = rankedOffers.find((o) => o.eligibilityStatus === 'eligible') || rankedOffers[0];
+    setSelectedOffer(bestEligible);
+
+    // Run initial negotiation for state readiness
+    const neg = runIntelligentNegotiation(newIntent, bestEligible, rankedOffers);
+    setNegotiationResult(neg);
+    setNegotiationSession(neg.session);
+    setFinalDeal(neg.finalDeal);
 
     // Create a new Deal record in Dashboard
     const newDeal: Deal = {
@@ -90,8 +110,8 @@ export function App() {
     logAuditEvent({
       dealId: newDeal.id,
       type: 'offers_compared',
-      title: 'Seller Offers Scanned & Scored',
-      description: `Matched 3 merchant listings against non-negotiable intent.`,
+      title: 'Seller Offers Scanned & Ranked',
+      description: `Matched ${SAMPLE_OFFERS.length} merchant listings against non-negotiable intent. Best candidate selected based on price savings and reliability.`,
       actor: 'dealmind_agent',
     });
 
@@ -102,20 +122,20 @@ export function App() {
   // Handler: Select a deal from Dashboard
   const handleSelectDeal = (deal: Deal) => {
     setActiveIntent(deal.intent);
-    const scoredOffers = SAMPLE_OFFERS.map((rawOffer) => {
-      const evaluation = evaluateOfferEligibility(rawOffer, deal.intent);
-      return evaluation.offer;
-    });
-    setOffers(scoredOffers);
+    const ranked = rankOffers(SAMPLE_OFFERS, deal.intent);
+    const rankedOffers = ranked.map((r) => r.offer);
+    setOffers(rankedOffers);
 
     // Find first eligible offer or default
-    const eligible = scoredOffers.find((o) => o.eligibilityStatus === 'eligible') || scoredOffers[0];
+    const eligible = rankedOffers.find((o) => o.eligibilityStatus === 'eligible') || rankedOffers[0];
     setSelectedOffer(eligible);
 
-    const session = createDeterministicNegotiationSession(deal.id, eligible, deal.intent);
-    setNegotiationSession(session);
+    const neg = runIntelligentNegotiation(deal.intent, eligible, rankedOffers);
+    setNegotiationResult(neg);
+    setNegotiationSession(neg.session);
+    setFinalDeal(neg.finalDeal);
 
-    const report = verifyDealWithIntentLock(deal.intent, eligible, session.finalPrice);
+    const report = verifyDealWithIntentLock(deal.intent, neg.finalDeal);
     setVerificationReport(report);
 
     setCurrentView('workspace');
@@ -125,15 +145,18 @@ export function App() {
   const handleStartNegotiation = (offer: ProductOffer) => {
     setSelectedOffer(offer);
 
-    const session = createDeterministicNegotiationSession(activeIntent.id, offer, activeIntent);
-    setNegotiationSession(session);
+    // Run modular multi-agent negotiation engine
+    const neg = runIntelligentNegotiation(activeIntent, offer, offers);
+    setNegotiationResult(neg);
+    setNegotiationSession(neg.session);
+    setFinalDeal(neg.finalDeal);
 
-    // Record audit event
+    // Record audit events
     logAuditEvent({
       dealId: activeIntent.id,
       type: 'negotiation_started',
-      title: `Autonomous Negotiation Channel Opened with ${offer.sellerName}`,
-      description: `DealMind Buyer Agent initiated dialogue for "${offer.productTitle}" starting at initial listing price ${offer.currency} ${offer.totalPrice.toLocaleString()}.`,
+      title: `Autonomous Dialogue Opened with ${offer.sellerName}`,
+      description: `DealMind Buyer Agent initiated policy negotiation for "${offer.productTitle}" starting at initial listing price ${offer.currency} ${offer.totalPrice.toLocaleString()}.`,
       actor: 'dealmind_agent',
       metadata: {
         seller: offer.sellerName,
@@ -141,30 +164,50 @@ export function App() {
       },
     });
 
-    logAuditEvent({
-      dealId: activeIntent.id,
-      type: 'counteroffer_received',
-      title: `Merchant Counter-Offer Reached: ${offer.currency} ${session.currentOfferPrice.toLocaleString()}`,
-      description: `Completed 4-round protocol with ${session.totalSaved.toLocaleString()} ${offer.currency} savings.`,
-      actor: 'seller_agent',
-      metadata: {
-        agreedPrice: session.currentOfferPrice,
-        totalSaved: session.totalSaved,
-      },
-    });
+    if (neg.success) {
+      logAuditEvent({
+        dealId: activeIntent.id,
+        type: 'counteroffer_received',
+        title: `Merchant Agreement Reached: ${offer.currency} ${neg.finalDeal.totalPayable.toLocaleString()} (${neg.finalDeal.roundCount} Rounds)`,
+        description: `Concluded ${neg.finalDeal.roundCount}-round protocol with ${offer.currency} ${neg.finalDeal.totalSaved.toLocaleString()} in buyer savings. Delivery: ${neg.finalDeal.deliveryEstimateDays} days.`,
+        actor: 'seller_agent',
+        metadata: {
+          agreedPrice: neg.finalDeal.totalPayable,
+          totalSaved: neg.finalDeal.totalSaved,
+          rounds: neg.finalDeal.roundCount,
+        },
+      });
+    } else {
+      logAuditEvent({
+        dealId: activeIntent.id,
+        type: 'counteroffer_received',
+        title: `Negotiation Terminated: ${neg.stopReason}`,
+        description: neg.summary,
+        actor: 'seller_agent',
+        metadata: {
+          stopReason: neg.stopReason,
+        },
+      });
+    }
 
     setCurrentView('negotiation');
   };
 
+  // Re-run negotiation simulation
+  const handleReRunNegotiation = () => {
+    if (!selectedOffer) return;
+    const neg = runIntelligentNegotiation(activeIntent, selectedOffer, offers);
+    setNegotiationResult(neg);
+    setNegotiationSession(neg.session);
+    setFinalDeal(neg.finalDeal);
+  };
+
   // Handler: When user proceeds to IntentLock verification from Negotiation view
   const handleProceedToVerification = () => {
-    if (!selectedOffer || !negotiationSession) return;
+    if (!finalDeal) return;
 
-    const report = verifyDealWithIntentLock(
-      activeIntent,
-      selectedOffer,
-      negotiationSession.currentOfferPrice
-    );
+    // Verify the complete FinalDeal object directly (Phase 2 Architectural boundary)
+    const report = verifyDealWithIntentLock(activeIntent, finalDeal);
     setVerificationReport(report);
 
     // Record audit event
@@ -239,9 +282,7 @@ export function App() {
             onStartNegotiation={handleStartNegotiation}
             onEditIntent={() => setCurrentView('find-deal')}
             onResetOffers={() => {
-              const fresh = SAMPLE_OFFERS.map(
-                (o) => evaluateOfferEligibility(o, activeIntent).offer
-              );
+              const fresh = rankOffers(SAMPLE_OFFERS, activeIntent).map((s) => s.offer);
               setOffers(fresh);
             }}
           />
@@ -254,6 +295,7 @@ export function App() {
             offer={selectedOffer}
             onProceedToVerification={handleProceedToVerification}
             onBackToWorkspace={() => setCurrentView('workspace')}
+            onReRunNegotiation={handleReRunNegotiation}
           />
         )}
 
