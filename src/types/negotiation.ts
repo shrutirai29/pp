@@ -103,4 +103,6 @@ export interface NegotiationResult {
   success: boolean;
   stopReason: NegotiationStopReason;
   summary: string;
+  engineMode?: 'live_llm' | 'mock_llm' | 'deterministic_fallback';
+  providerName?: string;
 }

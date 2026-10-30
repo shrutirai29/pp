@@ -21,6 +21,8 @@ import { Badge } from '../ui/Badge';
 
 interface NegotiationTimelineProps {
   session: NegotiationSession;
+  engineMode?: 'live_llm' | 'mock_llm' | 'deterministic_fallback';
+  providerName?: string;
   onProceedToVerification: () => void;
   onBackToWorkspace: () => void;
   onReRunNegotiation?: () => void;
@@ -28,6 +30,8 @@ interface NegotiationTimelineProps {
 
 export const NegotiationTimeline: React.FC<NegotiationTimelineProps> = ({
   session,
+  engineMode,
+  providerName,
   onProceedToVerification,
   onBackToWorkspace,
   onReRunNegotiation,
@@ -70,6 +74,19 @@ export const NegotiationTimeline: React.FC<NegotiationTimelineProps> = ({
               <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-navy-950 border border-navy-800 text-slate-400">
                 Simulated Seller Agent
               </span>
+              {engineMode === 'live_llm' ? (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-electric-950 border border-electric-500/50 text-electric-300 font-semibold">
+                  Live LLM Agent ({providerName || 'backend'})
+                </span>
+              ) : engineMode === 'mock_llm' ? (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950/80 border border-amber-600/50 text-amber-300">
+                  Mock LLM Mode (Offline Dev)
+                </span>
+              ) : (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-400">
+                  Deterministic Policy Fallback
+                </span>
+              )}
             </div>
 
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
@@ -219,6 +236,23 @@ export const NegotiationTimeline: React.FC<NegotiationTimelineProps> = ({
                       </span>
                     )}
                   </div>
+
+                  {/* Itemized Financial Breakdown (Decimal-safe recalculation) */}
+                  {msg.terms && (
+                    <div className="mb-2.5 rounded-md bg-navy-950/70 px-3 py-1.5 border border-navy-800 text-[11px] font-mono text-slate-400 flex flex-wrap items-center gap-2">
+                      <span>Item: <strong className="text-slate-200">{formatCurrency(msg.terms.productPrice, msg.currency)}</strong></span>
+                      <span>+</span>
+                      <span>Delivery: <strong className="text-slate-200">{formatCurrency(msg.terms.deliveryFee, msg.currency)}</strong></span>
+                      {msg.terms.otherCharges > 0 && (
+                        <>
+                          <span>+</span>
+                          <span>Other: <strong className="text-slate-200">{formatCurrency(msg.terms.otherCharges, msg.currency)}</strong></span>
+                        </>
+                      )}
+                      <span>=</span>
+                      <span className="text-electric-300 font-bold">Total: {formatCurrency(msg.terms.totalPayable, msg.currency)}</span>
+                    </div>
+                  )}
 
                   {/* Message Prose */}
                   <p className="text-xs sm:text-sm text-slate-300 leading-relaxed mb-3">

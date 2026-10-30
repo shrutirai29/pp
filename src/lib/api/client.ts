@@ -283,4 +283,48 @@ export const dealmindApi = {
       `/api/deals/${encodeURIComponent(dealId)}/payment`
     );
   },
+
+  /**
+   * Run server-coordinated LLM multi-agent negotiation
+   */
+  async runNegotiation(
+    dealId: string,
+    offerId: string,
+    productOffer?: any
+  ): Promise<{ success: boolean; data: any }> {
+    return request<{ success: boolean; data: any }>(
+      `/api/deals/${encodeURIComponent(dealId)}/negotiate`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ offerId, productOffer }),
+      }
+    );
+  },
+
+  /**
+   * Fetch latest negotiation session for a deal
+   */
+  async getNegotiationsForDeal(
+    dealId: string
+  ): Promise<{ success: boolean; data: any }> {
+    return request<{ success: boolean; data: any }>(
+      `/api/deals/${encodeURIComponent(dealId)}/negotiations`
+    );
+  },
+
+  /**
+   * Rank offers deterministically on backend
+   */
+  async rankOffers(
+    dealId: string,
+    offers: any[]
+  ): Promise<{ success: boolean; data: any[] }> {
+    return request<{ success: boolean; data: any[] }>(
+      `/api/deals/${encodeURIComponent(dealId)}/rank-offers`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ offers }),
+      }
+    );
+  },
 };

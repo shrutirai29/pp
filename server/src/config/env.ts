@@ -12,6 +12,14 @@ export const EnvSchema = z
     PAYPAL_CLIENT_SECRET: z.string().default(''),
     PAYPAL_ENV: z.enum(['sandbox', 'production']).default('sandbox'),
     PAYPAL_BASE_URL: z.string().default('https://api-m.sandbox.paypal.com'),
+
+    // LLM Provider Configuration
+    LLM_PROVIDER: z.enum(['mock', 'openai', 'anthropic', 'gemini']).default('mock'),
+    LLM_API_KEY: z.string().default(''),
+    LLM_MODEL: z.string().default('mock-model-v1'),
+    LLM_BASE_URL: z.string().default(''),
+    LLM_TIMEOUT_MS: z.coerce.number().default(15000),
+    LLM_MAX_RETRIES: z.coerce.number().default(2),
   })
   .refine(
     (data) => {
@@ -23,6 +31,18 @@ export const EnvSchema = z
     {
       message: 'In production mode, TOKEN_HMAC_SECRET must be explicitly set to a cryptographically secure secret.',
       path: ['TOKEN_HMAC_SECRET'],
+    }
+  )
+  .refine(
+    (data) => {
+      if (data.NODE_ENV === 'production' && data.LLM_PROVIDER !== 'mock' && (!data.LLM_API_KEY || data.LLM_API_KEY.trim() === '')) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: 'In production mode, LLM_API_KEY must be explicitly set when LLM_PROVIDER is not mock.',
+      path: ['LLM_API_KEY'],
     }
   );
 

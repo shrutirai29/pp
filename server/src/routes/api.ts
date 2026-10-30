@@ -18,6 +18,11 @@ import {
   CapturePayloadSchema,
   CancelPaymentPayloadSchema,
 } from '../schemas/dealSchemas.js';
+import { ExecuteNegotiationPayloadSchema } from '../schemas/negotiationSchemas.js';
+import { NegotiationRepository } from '../repositories/negotiationRepository.js';
+import { NegotiationCoordinator } from '../services/negotiation/negotiationCoordinator.js';
+import { OfferRankingService } from '../services/negotiation/offerRankingService.js';
+import { getServerSellerPolicy } from '../data/sellerPolicies.js';
 import { EnvConfig } from '../config/env.js';
 
 export function createApiRouter(
@@ -26,6 +31,8 @@ export function createApiRouter(
   approvalRepo: ApprovalRepository,
   auditRepo: AuditRepository,
   paymentService: PaymentService,
+  negRepo: NegotiationRepository,
+  negotiationCoordinator: NegotiationCoordinator,
   config: EnvConfig
 ): Router {
   const router = Router();
@@ -678,6 +685,139 @@ export function createApiRouter(
           error: err.message,
         });
       }
+      next(err);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // 11b. POST /api/deals/:id/negotiate - Run Server-Coordinated LLM Negotiation
+  // ---------------------------------------------------------------------------
+  router.post('/deals/:id/negotiate', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const deal = dealRepo.getDeal(req.params.id);
+      if (!deal) {
+        return res.status(404).json({ success: false, error: 'Deal not found' });
+      }
+
+      const userId = req.user?.id || 'dev-user-default';
+      if (deal.userId !== userId) {
+        return res.status(403).json({ success: false, error: 'Unauthorized: Deal belongs to another user.' });
+      }
+
+      const parsed = ExecuteNegotiationPayloadSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid negotiation request payload',
+          details: parsed.error.format(),
+        });
+      }
+
+      const { offerId, productOffer } = parsed.data;
+
+      // Construct offer terms from payload or server policy
+      const resolvedOffer = productOffer || {
+        id: offerId,
+        sellerName: getServerSellerPolicy(offerId).sellerName,
+        productTitle: deal.intent.productTitle,
+        basePrice: getServerSellerPolicy(offerId).startingPrice,
+        deliveryFee: getServerSellerPolicy(offerId).deliveryFee,
+        otherCharges: getServerSellerPolicy(offerId).otherCharges,
+        estimatedDeliveryDays: getServerSellerPolicy(offerId).deliveryOptions.standardDays,
+        warrantyMonths: getServerSellerPolicy(offerId).warrantyMonths,
+        hasSubscription: getServerSellerPolicy(offerId).hasSubscription,
+        condition: getServerSellerPolicy(offerId).condition,
+        currency: deal.intent.currency,
+      };
+
+      const result = await negotiationCoordinator.executeNegotiation(
+        deal.id,
+        userId,
+        deal.intent,
+        resolvedOffer
+      );
+
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // 11c. GET /api/deals/:id/negotiations - Get Latest Negotiation for Deal
+  // ---------------------------------------------------------------------------
+  router.get('/deals/:id/negotiations', (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const deal = dealRepo.getDeal(req.params.id);
+      if (!deal) {
+        return res.status(404).json({ success: false, error: 'Deal not found' });
+      }
+
+      const userId = req.user?.id || 'dev-user-default';
+      if (deal.userId !== userId) {
+        return res.status(403).json({ success: false, error: 'Unauthorized: Deal belongs to another user.' });
+      }
+
+      const latestNeg = negRepo.getLatestNegotiationForDeal(deal.id);
+      res.json({
+        success: true,
+        data: latestNeg,
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // 11d. GET /api/negotiations/:id - Get Specific Negotiation by ID
+  // ---------------------------------------------------------------------------
+  router.get('/negotiations/:id', (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const neg = negRepo.getNegotiation(req.params.id);
+      if (!neg) {
+        return res.status(404).json({ success: false, error: 'Negotiation session not found' });
+      }
+
+      const userId = req.user?.id || 'dev-user-default';
+      if (neg.userId !== userId) {
+        return res.status(403).json({ success: false, error: 'Unauthorized: Negotiation belongs to another user.' });
+      }
+
+      res.json({
+        success: true,
+        data: neg,
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // 11e. POST /api/deals/:id/rank-offers - Deterministic Offer Ranking
+  // ---------------------------------------------------------------------------
+  router.post('/deals/:id/rank-offers', (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const deal = dealRepo.getDeal(req.params.id);
+      if (!deal) {
+        return res.status(404).json({ success: false, error: 'Deal not found' });
+      }
+
+      const userId = req.user?.id || 'dev-user-default';
+      if (deal.userId !== userId) {
+        return res.status(403).json({ success: false, error: 'Unauthorized: Deal belongs to another user.' });
+      }
+
+      const offers = Array.isArray(req.body.offers) ? req.body.offers : [];
+      const ranked = OfferRankingService.rankOffers(offers, deal.intent);
+
+      res.json({
+        success: true,
+        data: ranked,
+      });
+    } catch (err) {
       next(err);
     }
   });

@@ -9,6 +9,8 @@ interface NegotiationPageProps {
   session: NegotiationSession;
   intent: UserIntent;
   offer: ProductOffer;
+  engineMode?: 'live_llm' | 'mock_llm' | 'deterministic_fallback';
+  providerName?: string;
   onProceedToVerification: () => void;
   onBackToWorkspace: () => void;
   onReRunNegotiation?: () => void;
@@ -17,6 +19,8 @@ interface NegotiationPageProps {
 export const NegotiationPage: React.FC<NegotiationPageProps> = ({
   session,
   intent,
+  engineMode,
+  providerName,
   onProceedToVerification,
   onBackToWorkspace,
   onReRunNegotiation,
@@ -29,6 +33,8 @@ export const NegotiationPage: React.FC<NegotiationPageProps> = ({
       {/* Main Negotiation Timeline */}
       <NegotiationTimeline
         session={session}
+        engineMode={engineMode}
+        providerName={providerName}
         onProceedToVerification={onProceedToVerification}
         onBackToWorkspace={onBackToWorkspace}
         onReRunNegotiation={onReRunNegotiation}

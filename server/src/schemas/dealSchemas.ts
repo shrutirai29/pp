@@ -124,8 +124,27 @@ export const CancelPaymentPayloadSchema = z.object({
   paypalOrderId: z.string().min(1),
 });
 
+export const NegotiationSessionSchema = z.object({
+  id: z.string(),
+  dealId: z.string(),
+  offerId: z.string(),
+  sellerName: z.string(),
+  initialPrice: z.number(),
+  currentOfferPrice: z.number(),
+  finalPrice: z.number().optional(),
+  currency: CurrencyCodeSchema,
+  totalSaved: z.number(),
+  status: z.enum(['active', 'agreed', 'rejected']),
+  round: z.number().int(),
+  messages: z.array(NegotiationMessageSchema),
+  finalDeal: FinalDealSchema.optional(),
+});
+
 export type UserIntent = z.infer<typeof UserIntentSchema>;
 export type FinalDeal = z.infer<typeof FinalDealSchema>;
+export type NegotiationTerms = z.infer<typeof NegotiationTermsSchema>;
+export type NegotiationMessage = z.infer<typeof NegotiationMessageSchema>;
+export type NegotiationSession = z.infer<typeof NegotiationSessionSchema>;
 export type CreateDealPayload = z.infer<typeof CreateDealPayloadSchema>;
 export type CheckoutPayload = z.infer<typeof CheckoutPayloadSchema>;
 export type CapturePayload = z.infer<typeof CapturePayloadSchema>;

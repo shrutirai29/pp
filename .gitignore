@@ -35,4 +35,4 @@ dist-ssr
 *.sqlite
 *.sqlite*
 server/data/
-data/
+/data/

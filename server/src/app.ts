@@ -7,8 +7,12 @@ import { VerificationRepository } from './repositories/verificationRepository.js
 import { ApprovalRepository } from './repositories/approvalRepository.js';
 import { AuditRepository } from './repositories/auditRepository.js';
 import { PaymentRepository } from './repositories/paymentRepository.js';
+import { NegotiationRepository } from './repositories/negotiationRepository.js';
 import { PaymentService } from './services/paymentService.js';
 import { PayPalClient, HttpPayPalClient } from './services/paypalClient.js';
+import { LLMProvider } from './llm/types.js';
+import { createLLMProvider } from './llm/providerFactory.js';
+import { NegotiationCoordinator } from './services/negotiation/negotiationCoordinator.js';
 import { createApiRouter } from './routes/api.js';
 import { authMiddleware } from './middleware/auth.js';
 import { rateLimiter } from './middleware/rateLimiter.js';
@@ -17,7 +21,8 @@ import { errorHandler } from './middleware/errorHandler.js';
 export function createApp(
   db: DatabaseSync,
   config: EnvConfig,
-  customPayPalClient?: PayPalClient
+  customPayPalClient?: PayPalClient,
+  customLLMProvider?: LLMProvider
 ): Express {
   const app = express();
 
@@ -57,6 +62,16 @@ export function createApp(
   const approvalRepo = new ApprovalRepository(db);
   const auditRepo = new AuditRepository(db);
   const paymentRepo = new PaymentRepository(db);
+  const negRepo = new NegotiationRepository(db);
+
+  // LLM Provider & Negotiation Coordinator
+  const llmProvider = customLLMProvider || createLLMProvider(config);
+  const negotiationCoordinator = new NegotiationCoordinator(
+    llmProvider,
+    negRepo,
+    dealRepo,
+    auditRepo
+  );
 
   // PayPal client (Http client for live Sandbox, or injected mock for testing)
   const paypalClient =
@@ -83,7 +98,7 @@ export function createApp(
     res.json({
       status: 'ok',
       service: 'DealMind IntentLock Security Gateway',
-      version: '5.0.0',
+      version: '6.0.0',
       timestamp: new Date().toISOString(),
     });
   });
@@ -91,7 +106,16 @@ export function createApp(
   // Mount API endpoints
   app.use(
     '/api',
-    createApiRouter(dealRepo, verifRepo, approvalRepo, auditRepo, paymentService, config)
+    createApiRouter(
+      dealRepo,
+      verifRepo,
+      approvalRepo,
+      auditRepo,
+      paymentService,
+      negRepo,
+      negotiationCoordinator,
+      config
+    )
   );
 
   // Centralized error handler

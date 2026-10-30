@@ -244,18 +244,31 @@ export function App() {
   };
 
   // Handler: When user clicks "Start Negotiation" on an eligible offer in Workspace
-  const handleStartNegotiation = (offer: ProductOffer) => {
+  const handleStartNegotiation = async (offer: ProductOffer) => {
     setSelectedOffer(offer);
+    setApprovalRecord(null);
+    setAuthorizationToken(undefined);
 
-    // Run modular multi-agent negotiation engine
-    const neg = runIntelligentNegotiation(activeIntent, offer, offers);
+    let neg: any;
+    if (isServerOnline) {
+      try {
+        await dealmindApi.createDeal(activeIntent, undefined, activeIntent.productTitle);
+        const srvRes = await dealmindApi.runNegotiation(activeIntent.id, offer.id, offer);
+        if (srvRes.success && srvRes.data) {
+          neg = srvRes.data;
+        }
+      } catch (err) {
+        console.warn('Backend LLM negotiation returned error, falling back to local engine:', err);
+      }
+    }
+
+    if (!neg) {
+      neg = runIntelligentNegotiation(activeIntent, offer, offers);
+    }
+
     setNegotiationResult(neg);
     setNegotiationSession(neg.session);
     setFinalDeal(neg.finalDeal);
-
-    // Invalidate prior approval
-    setApprovalRecord(null);
-    setAuthorizationToken(undefined);
 
     // Record audit events
     logAuditEvent({
@@ -300,14 +313,30 @@ export function App() {
   };
 
   // Re-run negotiation simulation
-  const handleReRunNegotiation = () => {
+  const handleReRunNegotiation = async () => {
     if (!selectedOffer) return;
-    const neg = runIntelligentNegotiation(activeIntent, selectedOffer, offers);
+    setApprovalRecord(null);
+    setAuthorizationToken(undefined);
+
+    let neg: any;
+    if (isServerOnline) {
+      try {
+        const srvRes = await dealmindApi.runNegotiation(activeIntent.id, selectedOffer.id, selectedOffer);
+        if (srvRes.success && srvRes.data) {
+          neg = srvRes.data;
+        }
+      } catch (err) {
+        console.warn('Backend LLM re-run error, using local engine:', err);
+      }
+    }
+
+    if (!neg) {
+      neg = runIntelligentNegotiation(activeIntent, selectedOffer, offers);
+    }
+
     setNegotiationResult(neg);
     setNegotiationSession(neg.session);
     setFinalDeal(neg.finalDeal);
-    setApprovalRecord(null);
-    setAuthorizationToken(undefined);
   };
 
   // Handler: When user proceeds to IntentLock verification from Negotiation view
@@ -594,6 +623,8 @@ export function App() {
             session={negotiationSession}
             intent={activeIntent}
             offer={selectedOffer}
+            engineMode={negotiationResult?.engineMode}
+            providerName={negotiationResult?.providerName}
             onProceedToVerification={handleProceedToVerification}
             onBackToWorkspace={() => setCurrentView('workspace')}
             onReRunNegotiation={handleReRunNegotiation}
