@@ -7,6 +7,10 @@ export const EnvSchema = z.object({
   DATABASE_PATH: z.string().default('data/dealmind.sqlite'),
   APPROVAL_VALIDITY_SECONDS: z.coerce.number().default(900), // 15 mins
   TOKEN_HMAC_SECRET: z.string().default('dev_insecure_hmac_secret_for_demo_only'),
+  PAYPAL_CLIENT_ID: z.string().default(''),
+  PAYPAL_CLIENT_SECRET: z.string().default(''),
+  PAYPAL_ENV: z.enum(['sandbox', 'production']).default('sandbox'),
+  PAYPAL_BASE_URL: z.string().default('https://api-m.sandbox.paypal.com'),
 });
 
 export type EnvConfig = z.infer<typeof EnvSchema>;

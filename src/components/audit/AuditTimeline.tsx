@@ -12,7 +12,8 @@ import {
   Bot, 
   Store, 
   History,
-  AlertCircle
+  AlertCircle,
+  CreditCard
 } from 'lucide-react';
 
 interface AuditTimelineProps {
@@ -46,6 +47,11 @@ export const AuditTimeline: React.FC<AuditTimelineProps> = ({ events }) => {
       icon: <Lock className="h-3.5 w-3.5" />,
       color: 'text-sky-400 bg-sky-950/60 border-sky-700/40',
     },
+    paypal_gateway: {
+      label: 'PayPal Sandbox Gateway',
+      icon: <CreditCard className="h-3.5 w-3.5" />,
+      color: 'text-blue-400 bg-blue-950/60 border-blue-700/40',
+    },
   };
 
   const getEventIcon = (type: AuditEvent['type']) => {
@@ -64,6 +70,9 @@ export const AuditTimeline: React.FC<AuditTimelineProps> = ({ events }) => {
         return <ShieldCheck className="h-4 w-4 text-emerald-400" />;
       case 'deal_rejected':
         return <AlertCircle className="h-4 w-4 text-rose-400" />;
+      case 'paypal_order_created':
+      case 'paypal_payment_completed':
+        return <CreditCard className="h-4 w-4 text-blue-400" />;
       default:
         return <History className="h-4 w-4 text-slate-400" />;
     }

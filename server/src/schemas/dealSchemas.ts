@@ -110,8 +110,25 @@ export const ConsumeAuthorizationPayloadSchema = z.object({
   authorizationToken: z.string().min(1),
 });
 
+export const CheckoutPayloadSchema = z.object({
+  authorizationToken: z.string().optional(),
+  idempotencyKey: z.string().optional(),
+});
+
+export const CapturePayloadSchema = z.object({
+  paypalOrderId: z.string().min(1),
+  idempotencyKey: z.string().optional(),
+});
+
+export const CancelPaymentPayloadSchema = z.object({
+  paypalOrderId: z.string().min(1),
+});
+
 export type UserIntent = z.infer<typeof UserIntentSchema>;
 export type FinalDeal = z.infer<typeof FinalDealSchema>;
 export type CreateDealPayload = z.infer<typeof CreateDealPayloadSchema>;
+export type CheckoutPayload = z.infer<typeof CheckoutPayloadSchema>;
+export type CapturePayload = z.infer<typeof CapturePayloadSchema>;
+export type CancelPaymentPayload = z.infer<typeof CancelPaymentPayloadSchema>;
 export type CurrencyCode = z.infer<typeof CurrencyCodeSchema>;
 export type ProductCondition = z.infer<typeof ProductConditionSchema>;

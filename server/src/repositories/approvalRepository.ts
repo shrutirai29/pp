@@ -61,6 +61,10 @@ export class ApprovalRepository {
     return row ? this.mapRow(row) : null;
   }
 
+  public getApprovalById(approvalId: string): StoredApproval | null {
+    return this.getApproval(approvalId);
+  }
+
   public getLatestApprovalForDeal(dealId: string): StoredApproval | null {
     const stmt = this.db.prepare(`
       SELECT * FROM approvals
@@ -87,7 +91,7 @@ export class ApprovalRepository {
     const now = new Date().toISOString();
     const stmt = this.db.prepare(`
       UPDATE approvals
-      SET status = 'DECLINED', declinedAt = ?
+      SET status = 'DECLINED', declined_at = ?
       WHERE id = ? AND status = 'PENDING'
     `);
     const info = stmt.run(now, approvalId);

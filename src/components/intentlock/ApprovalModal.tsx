@@ -22,6 +22,7 @@ interface ApprovalModalProps {
   onApprove: () => void;
   onDecline: () => void;
   onCancel: () => void;
+  onProceedToCheckout?: () => void;
   authorizationToken?: string;
 }
 
@@ -32,6 +33,7 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
   onApprove,
   onDecline,
   onCancel,
+  onProceedToCheckout,
   authorizationToken,
 }) => {
   const isApproved = approvalRecord?.status === 'APPROVED';
@@ -171,19 +173,17 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
           )}
 
           {isApproved && (
-            <div className="relative group">
-              <Button
-                variant="primary"
-                size="md"
-                disabled={true}
-                className="bg-navy-800 border-navy-700 text-slate-400 cursor-not-allowed opacity-75"
-              >
-                Proceed to PayPal Checkout (Phase 4)
-              </Button>
-              <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-72 rounded-lg bg-navy-950 border border-navy-700 p-2 text-xs text-slate-300 shadow-xl">
-                PayPal Sandbox Gateway activation is planned for Phase 4. One-time authorization token is ready.
-              </div>
-            </div>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={() => {
+                onCancel();
+                if (onProceedToCheckout) onProceedToCheckout();
+              }}
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold"
+            >
+              Proceed to PayPal Sandbox Checkout
+            </Button>
           )}
         </div>
       </div>

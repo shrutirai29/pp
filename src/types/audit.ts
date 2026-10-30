@@ -3,7 +3,8 @@ export type AuditActor =
   | 'dealmind_agent' 
   | 'seller_agent' 
   | 'intentlock_engine' 
-  | 'checkout_gateway';
+  | 'checkout_gateway'
+  | 'paypal_gateway';
 
 export type AuditEventType = 
   | 'requirements_created' 
@@ -22,7 +23,11 @@ export type AuditEventType =
   | 'approval_declined'
   | 'approval_expired'
   | 'approval_invalidated'
-  | 'checkout_attempted';
+  | 'checkout_attempted'
+  | 'paypal_order_created'
+  | 'paypal_payment_completed'
+  | 'paypal_payment_failed'
+  | 'paypal_payment_cancelled';
 
 export interface AuditEvent {
   id: string;

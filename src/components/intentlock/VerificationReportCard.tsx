@@ -4,6 +4,7 @@ import { UserIntent } from '../../types/deal';
 import { FinalDeal } from '../../types/negotiation';
 import { CheckDetailItem } from './CheckDetailItem';
 import { ApprovalModal } from './ApprovalModal';
+import { PayPalCheckoutModal } from '../checkout/PayPalCheckoutModal';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { formatCurrency } from '../../lib/currency';
@@ -30,8 +31,10 @@ interface VerificationReportCardProps {
   onApprove?: () => void;
   onDecline?: () => void;
   authorizationToken?: string;
+  isServerOnline?: boolean;
   onReturnToNegotiation: () => void;
   onReturnToWorkspace: () => void;
+  onPaymentSuccess?: (captureData: any) => void;
 }
 
 export const VerificationReportCard: React.FC<VerificationReportCardProps> = ({
@@ -42,17 +45,21 @@ export const VerificationReportCard: React.FC<VerificationReportCardProps> = ({
   onApprove,
   onDecline,
   authorizationToken,
+  isServerOnline = false,
   onReturnToNegotiation,
   onReturnToWorkspace,
+  onPaymentSuccess,
 }) => {
   const [copiedFingerprint, setCopiedFingerprint] = useState(false);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const [showPayPalModal, setShowPayPalModal] = useState(false);
 
   const isVerified = report.status.toUpperCase() === 'VERIFIED';
   const isRejected = report.status.toUpperCase() === 'REJECTED';
   const isNeedsReview = report.status.toUpperCase() === 'NEEDS_REVIEW';
 
   const isApproved = approvalRecord?.status === 'APPROVED';
+  const isPaymentEligible = isVerified && isApproved && isServerOnline;
 
   const handleCopyFingerprint = () => {
     if (report.dealFingerprint) {
@@ -363,18 +370,30 @@ export const VerificationReportCard: React.FC<VerificationReportCardProps> = ({
                 <Button
                   variant="primary"
                   size="md"
-                  disabled={true}
+                  disabled={!isPaymentEligible}
+                  onClick={() => setShowPayPalModal(true)}
                   leftIcon={<CreditCard className="h-4 w-4" />}
-                  className="bg-navy-800 border-navy-700 text-slate-400 cursor-not-allowed opacity-75"
+                  className={
+                    isPaymentEligible
+                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold shadow-lg shadow-blue-500/20'
+                      : 'bg-navy-800 border-navy-700 text-slate-400 cursor-not-allowed opacity-60'
+                  }
                 >
-                  Proceed to PayPal Checkout (Phase 5)
+                  Proceed to PayPal Checkout
                 </Button>
-                <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-72 rounded-lg bg-navy-950 border border-navy-700 p-2.5 text-xs text-slate-300 shadow-xl z-50">
-                  <p className="font-semibold text-white mb-0.5">PayPal Sandbox Checkout</p>
-                  <p className="text-[11px] text-slate-400">
-                    PayPal checkout is reserved for future integration. Single-use transaction authorization token is cryptographically signed and stored in SQLite.
-                  </p>
-                </div>
+
+                {!isPaymentEligible && (
+                  <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-72 rounded-lg bg-navy-950 border border-navy-700 p-2.5 text-xs text-slate-300 shadow-xl z-50">
+                    <p className="font-semibold text-white mb-0.5">Checkout Locked</p>
+                    <p className="text-[11px] text-slate-400">
+                      {!isServerOnline
+                        ? 'Backend server is offline. IntentLock cannot authorize payment in client-only mode.'
+                        : !isApproved
+                        ? 'Human approval required: Click "Approve Deal & Authorize" before checkout can proceed.'
+                        : 'Deal must pass all IntentLock security checks.'}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -399,7 +418,26 @@ export const VerificationReportCard: React.FC<VerificationReportCardProps> = ({
             if (onDecline) onDecline();
           }}
           onCancel={() => setShowApprovalModal(false)}
+          onProceedToCheckout={() => setShowPayPalModal(true)}
           authorizationToken={authorizationToken}
+        />
+      )}
+
+      {/* Modal for PayPal Sandbox Checkout */}
+      {showPayPalModal && deal && (
+        <PayPalCheckoutModal
+          deal={deal}
+          intent={intent}
+          report={report}
+          approvalRecord={approvalRecord || null}
+          authorizationToken={authorizationToken}
+          isServerOnline={isServerOnline}
+          onClose={() => setShowPayPalModal(false)}
+          onPaymentSuccess={(captureData) => {
+            if (onPaymentSuccess) {
+              onPaymentSuccess(captureData);
+            }
+          }}
         />
       )}
     </div>

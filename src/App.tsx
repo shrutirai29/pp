@@ -449,6 +449,48 @@ export function App() {
     });
   };
 
+  // Handler: PayPal Sandbox Payment confirmed by backend
+  const handlePaymentSuccess = (captureResult: any) => {
+    // 1. Update deal status
+    setDeals((prev) =>
+      prev.map((d) => {
+        if (d.intent.id === activeIntent.id || d.id === 'deal-001') {
+          return {
+            ...d,
+            status: 'verified', // keeps verified visual state with paid completion
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return d;
+      })
+    );
+
+    // 2. Mark approval as consumed
+    if (approvalRecord) {
+      setApprovalRecord({
+        ...approvalRecord,
+        status: 'CONSUMED',
+        consumedAt: new Date().toISOString(),
+      });
+    }
+
+    // 3. Log confirmed audit event
+    logAuditEvent({
+      dealId: activeIntent.id,
+      type: 'paypal_payment_completed',
+      title: 'PayPal Sandbox Payment Confirmed & Secured',
+      description: `Payment captured successfully via PayPal Sandbox. Capture ID: ${captureResult.captureId}. Transaction secured with IntentLock.`,
+      actor: 'paypal_gateway',
+      metadata: {
+        orderId: captureResult.paypalOrderId,
+        captureId: captureResult.captureId,
+        amount: captureResult.amount,
+        currency: captureResult.currency,
+        payer: captureResult.payerEmail,
+      },
+    });
+  };
+
   // Reset demo events
   const handleResetAuditEvents = () => {
     setAuditEvents(INITIAL_MOCK_AUDIT_EVENTS);
@@ -516,8 +558,10 @@ export function App() {
             onApprove={handleUserApprove}
             onDecline={handleUserDecline}
             authorizationToken={authorizationToken}
+            isServerOnline={isServerOnline}
             onReturnToNegotiation={() => setCurrentView('negotiation')}
             onReturnToWorkspace={() => setCurrentView('workspace')}
+            onPaymentSuccess={handlePaymentSuccess}
           />
         )}
 

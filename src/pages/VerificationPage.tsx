@@ -12,8 +12,10 @@ interface VerificationPageProps {
   onApprove?: () => void;
   onDecline?: () => void;
   authorizationToken?: string;
+  isServerOnline?: boolean;
   onReturnToNegotiation: () => void;
   onReturnToWorkspace: () => void;
+  onPaymentSuccess?: (captureResult: any) => void;
 }
 
 export const VerificationPage: React.FC<VerificationPageProps> = ({
@@ -24,8 +26,10 @@ export const VerificationPage: React.FC<VerificationPageProps> = ({
   onApprove,
   onDecline,
   authorizationToken,
+  isServerOnline = false,
   onReturnToNegotiation,
   onReturnToWorkspace,
+  onPaymentSuccess,
 }) => {
   return (
     <div className="space-y-6">
@@ -37,8 +41,10 @@ export const VerificationPage: React.FC<VerificationPageProps> = ({
         onApprove={onApprove}
         onDecline={onDecline}
         authorizationToken={authorizationToken}
+        isServerOnline={isServerOnline}
         onReturnToNegotiation={onReturnToNegotiation}
         onReturnToWorkspace={onReturnToWorkspace}
+        onPaymentSuccess={onPaymentSuccess}
       />
     </div>
   );

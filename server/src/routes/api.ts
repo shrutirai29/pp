@@ -4,6 +4,7 @@ import { DealRepository } from '../repositories/dealRepository.js';
 import { VerificationRepository } from '../repositories/verificationRepository.js';
 import { ApprovalRepository } from '../repositories/approvalRepository.js';
 import { AuditRepository } from '../repositories/auditRepository.js';
+import { PaymentService, PaymentSecurityError } from '../services/paymentService.js';
 import { ServerIntentVerifier } from '../services/intentLockService.js';
 import {
   generateServerDealFingerprint,
@@ -13,6 +14,9 @@ import {
   CreateDealPayloadSchema,
   FinalDealSchema,
   ConsumeAuthorizationPayloadSchema,
+  CheckoutPayloadSchema,
+  CapturePayloadSchema,
+  CancelPaymentPayloadSchema,
 } from '../schemas/dealSchemas.js';
 import { EnvConfig } from '../config/env.js';
 
@@ -21,9 +25,24 @@ export function createApiRouter(
   verifRepo: VerificationRepository,
   approvalRepo: ApprovalRepository,
   auditRepo: AuditRepository,
+  paymentService: PaymentService,
   config: EnvConfig
 ): Router {
   const router = Router();
+
+  // ---------------------------------------------------------------------------
+  // 0. GET /api/config/paypal - Public Sandbox Client Configuration (Safe)
+  // ---------------------------------------------------------------------------
+  router.get('/config/paypal', (_req: Request, res: Response) => {
+    res.json({
+      success: true,
+      data: {
+        clientId: config.PAYPAL_CLIENT_ID || 'sb',
+        env: config.PAYPAL_ENV || 'sandbox',
+        currency: 'USD',
+      },
+    });
+  });
 
   // ---------------------------------------------------------------------------
   // 1. POST /api/deals - Create a deal record with UserIntent
@@ -77,8 +96,18 @@ export function createApiRouter(
         });
       }
 
+      // Check user authorization on deal
+      const userId = req.user?.id || 'dev-user-default';
+      if (deal.userId !== userId) {
+        return res.status(403).json({
+          success: false,
+          error: "Unauthorized: Deal belongs to another user.",
+        });
+      }
+
       const latestReport = verifRepo.getLatestReportForDeal(deal.id);
       const latestApproval = approvalRepo.getLatestApprovalForDeal(deal.id);
+      const latestPayment = paymentService.getPaymentForDeal(deal.id, userId);
 
       res.json({
         success: true,
@@ -86,6 +115,7 @@ export function createApiRouter(
           ...deal,
           latestVerification: latestReport?.report || null,
           latestApproval: latestApproval || null,
+          latestPayment: latestPayment || null,
         },
       });
     } catch (err) {
@@ -403,6 +433,11 @@ export function createApiRouter(
       const deal = dealRepo.getDeal(req.params.id);
       if (!deal) return res.status(404).json({ success: false, error: 'Deal not found' });
 
+      const userId = req.user?.id || 'dev-user-default';
+      if (deal.userId !== userId) {
+        return res.status(403).json({ success: false, error: "Unauthorized: Deal belongs to another user." });
+      }
+
       const approval = approvalRepo.getLatestApprovalForDeal(deal.id);
       if (!approval) {
         return res.status(400).json({ success: false, error: 'No approval record found.' });
@@ -483,12 +518,146 @@ export function createApiRouter(
   });
 
   // ---------------------------------------------------------------------------
-  // 8. GET /api/deals/:id/audit - Return persisted audit trail
+  // 8. POST /api/deals/:id/checkout - Create PayPal Sandbox Order (Phase 5)
+  // ---------------------------------------------------------------------------
+  router.post('/deals/:id/checkout', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = CheckoutPayloadSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid checkout request payload',
+          details: parsed.error.format(),
+        });
+      }
+
+      const userId = req.user?.id || 'dev-user-default';
+      const result = await paymentService.initiateCheckout({
+        dealId: req.params.id,
+        userId,
+        authorizationToken: parsed.data.authorizationToken,
+        idempotencyKey: parsed.data.idempotencyKey,
+      });
+
+      res.status(201).json({
+        success: true,
+        data: result,
+      });
+    } catch (err) {
+      if (err instanceof PaymentSecurityError) {
+        return res.status(err.statusCode).json({
+          success: false,
+          error: err.message,
+        });
+      }
+      next(err);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // 9. POST /api/deals/:id/capture - Server Capture of PayPal Sandbox Order (Phase 5)
+  // ---------------------------------------------------------------------------
+  router.post('/deals/:id/capture', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = CapturePayloadSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid capture request: paypalOrderId is required.',
+          details: parsed.error.format(),
+        });
+      }
+
+      const userId = req.user?.id || 'dev-user-default';
+      const result = await paymentService.capturePayment({
+        dealId: req.params.id,
+        userId,
+        paypalOrderId: parsed.data.paypalOrderId,
+        idempotencyKey: parsed.data.idempotencyKey,
+      });
+
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (err) {
+      if (err instanceof PaymentSecurityError) {
+        return res.status(err.statusCode).json({
+          success: false,
+          error: err.message,
+        });
+      }
+      next(err);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // 10. GET /api/deals/:id/payment - Fetch current payment status
+  // ---------------------------------------------------------------------------
+  router.get('/deals/:id/payment', (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.user?.id || 'dev-user-default';
+      const payment = paymentService.getPaymentForDeal(req.params.id, userId);
+
+      res.json({
+        success: true,
+        data: payment,
+      });
+    } catch (err) {
+      if (err instanceof PaymentSecurityError) {
+        return res.status(err.statusCode).json({
+          success: false,
+          error: err.message,
+        });
+      }
+      next(err);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // 11. POST /api/deals/:id/cancel-payment - Buyer Cancelled PayPal Checkout
+  // ---------------------------------------------------------------------------
+  router.post('/deals/:id/cancel-payment', (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = CancelPaymentPayloadSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid payload: paypalOrderId is required.',
+        });
+      }
+
+      const userId = req.user?.id || 'dev-user-default';
+      paymentService.recordCancellation(req.params.id, userId, parsed.data.paypalOrderId);
+
+      res.json({
+        success: true,
+        message: 'Payment cancellation recorded.',
+      });
+    } catch (err) {
+      if (err instanceof PaymentSecurityError) {
+        return res.status(err.statusCode).json({
+          success: false,
+          error: err.message,
+        });
+      }
+      next(err);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // 12. GET /api/deals/:id/audit - Return persisted audit trail
   // ---------------------------------------------------------------------------
   router.get('/deals/:id/audit', (req: Request, res: Response, next: NextFunction) => {
     try {
       const deal = dealRepo.getDeal(req.params.id);
       if (!deal) return res.status(404).json({ success: false, error: 'Deal not found' });
+
+      // Check user authorization on deal
+      const userId = req.user?.id || 'dev-user-default';
+      if (deal.userId !== userId) {
+        return res.status(403).json({ success: false, error: "Unauthorized: Deal belongs to another user." });
+      }
 
       const events = auditRepo.getEventsForDeal(deal.id);
       res.json({

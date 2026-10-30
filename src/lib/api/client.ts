@@ -49,6 +49,43 @@ export interface ServerHealthResponse {
   timestamp: string;
 }
 
+export interface PayPalCheckoutResponse {
+  paymentId: string;
+  paypalOrderId: string;
+  status: string;
+  amount: number;
+  currency: string;
+  approvalUrl?: string;
+}
+
+export interface PayPalCaptureResponse {
+  success: boolean;
+  paymentId: string;
+  status: string;
+  paypalOrderId: string;
+  captureId?: string;
+  amount: number;
+  currency: string;
+  payerEmail?: string;
+  message: string;
+}
+
+export interface StoredPaymentInfo {
+  id: string;
+  dealId: string;
+  userId: string;
+  approvalId: string;
+  paypalOrderId: string;
+  paypalCaptureId: string | null;
+  status: string;
+  amount: number;
+  currency: string;
+  payerEmail: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const dealmindApi = {
   /**
    * Check backend server connectivity and health
@@ -169,6 +206,74 @@ export const dealmindApi = {
   async getAuditTrail(dealId: string): Promise<{ success: boolean; events: AuditEvent[] }> {
     return request<{ success: boolean; events: AuditEvent[] }>(
       `/api/deals/${encodeURIComponent(dealId)}/audit`
+    );
+  },
+
+  /**
+   * Fetch public PayPal Sandbox configuration
+   */
+  async getPayPalConfig(): Promise<{ success: boolean; data: { clientId: string; env: string; currency: string } }> {
+    return request<{ success: boolean; data: { clientId: string; env: string; currency: string } }>(
+      '/api/config/paypal'
+    );
+  },
+
+  /**
+   * Initiate PayPal Sandbox checkout (server-enforced order creation)
+   */
+  async initiateCheckout(
+    dealId: string,
+    authorizationToken?: string
+  ): Promise<{ success: boolean; data: PayPalCheckoutResponse }> {
+    return request<{ success: boolean; data: PayPalCheckoutResponse }>(
+      `/api/deals/${encodeURIComponent(dealId)}/checkout`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ authorizationToken }),
+      }
+    );
+  },
+
+  /**
+   * Complete and capture PayPal Sandbox order on backend
+   */
+  async capturePayment(
+    dealId: string,
+    paypalOrderId: string
+  ): Promise<{ success: boolean; data: PayPalCaptureResponse }> {
+    return request<{ success: boolean; data: PayPalCaptureResponse }>(
+      `/api/deals/${encodeURIComponent(dealId)}/capture`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ paypalOrderId }),
+      }
+    );
+  },
+
+  /**
+   * Record cancellation when buyer closes PayPal checkout
+   */
+  async cancelPayment(
+    dealId: string,
+    paypalOrderId: string
+  ): Promise<{ success: boolean; message: string }> {
+    return request<{ success: boolean; message: string }>(
+      `/api/deals/${encodeURIComponent(dealId)}/cancel-payment`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ paypalOrderId }),
+      }
+    );
+  },
+
+  /**
+   * Fetch payment status for deal
+   */
+  async getPayment(
+    dealId: string
+  ): Promise<{ success: boolean; data: StoredPaymentInfo | null }> {
+    return request<{ success: boolean; data: StoredPaymentInfo | null }>(
+      `/api/deals/${encodeURIComponent(dealId)}/payment`
     );
   },
 };
