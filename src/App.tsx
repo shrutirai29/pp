@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { UserIntent, Deal } from './types/deal';
 import { ProductOffer } from './types/offer';
 import { NegotiationSession, FinalDeal } from './types/negotiation';
-import { VerificationReport } from './types/verification';
+import { VerificationReport, UserApprovalRecord } from './types/verification';
 import { AuditEvent } from './types/audit';
 
 import { DEFAULT_EXAMPLE_INTENT, MOCK_DASHBOARD_DEALS } from './data/mockProducts';
@@ -12,6 +12,7 @@ import { INITIAL_MOCK_AUDIT_EVENTS } from './data/mockAuditEvents';
 import { runIntelligentNegotiation } from './lib/agents/negotiationEngine';
 import { verifyDealWithIntentLock } from './lib/mockVerification';
 import { rankOffers } from './lib/dealScoring';
+import { ApprovalManager } from './lib/intentlock/approvalManager';
 
 import { Navbar, NavView } from './components/layout/Navbar';
 import { Footer } from './components/layout/Footer';
@@ -50,6 +51,20 @@ export function App() {
     return verifyDealWithIntentLock(DEFAULT_EXAMPLE_INTENT, negotiationResult.finalDeal);
   });
 
+  // Human approval record for verified deal
+  const [approvalRecord, setApprovalRecord] = useState<UserApprovalRecord | null>(() => {
+    if (verificationReport && String(verificationReport.status).toUpperCase() === 'VERIFIED') {
+      try {
+        return ApprovalManager.createApprovalRequest(verificationReport);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
+
+  const [authorizationToken, setAuthorizationToken] = useState<string | undefined>(undefined);
+
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>(INITIAL_MOCK_AUDIT_EVENTS);
 
   // Helper to add audit events
@@ -81,6 +96,10 @@ export function App() {
     setNegotiationResult(neg);
     setNegotiationSession(neg.session);
     setFinalDeal(neg.finalDeal);
+
+    // Invalidate approval state on new deal
+    setApprovalRecord(null);
+    setAuthorizationToken(undefined);
 
     // Create a new Deal record in Dashboard
     const newDeal: Deal = {
@@ -138,6 +157,14 @@ export function App() {
     const report = verifyDealWithIntentLock(deal.intent, neg.finalDeal);
     setVerificationReport(report);
 
+    if (String(report.status).toUpperCase() === 'VERIFIED') {
+      const appr = ApprovalManager.createApprovalRequest(report);
+      setApprovalRecord(appr);
+    } else {
+      setApprovalRecord(null);
+    }
+    setAuthorizationToken(undefined);
+
     setCurrentView('workspace');
   };
 
@@ -150,6 +177,10 @@ export function App() {
     setNegotiationResult(neg);
     setNegotiationSession(neg.session);
     setFinalDeal(neg.finalDeal);
+
+    // Invalidate prior approval
+    setApprovalRecord(null);
+    setAuthorizationToken(undefined);
 
     // Record audit events
     logAuditEvent({
@@ -200,15 +231,37 @@ export function App() {
     setNegotiationResult(neg);
     setNegotiationSession(neg.session);
     setFinalDeal(neg.finalDeal);
+    setApprovalRecord(null);
+    setAuthorizationToken(undefined);
   };
 
   // Handler: When user proceeds to IntentLock verification from Negotiation view
   const handleProceedToVerification = () => {
     if (!finalDeal) return;
 
-    // Verify the complete FinalDeal object directly (Phase 2 Architectural boundary)
+    logAuditEvent({
+      dealId: activeIntent.id,
+      type: 'verification_started',
+      title: 'IntentLock Independent Verification Triggered',
+      description: 'Auditing complete seller-accepted FinalDeal against original UserIntent and calculating SHA-256 fingerprint.',
+      actor: 'intentlock_engine',
+    });
+
+    // Verify the complete FinalDeal object directly
     const report = verifyDealWithIntentLock(activeIntent, finalDeal);
     setVerificationReport(report);
+
+    // Record fingerprint generation
+    logAuditEvent({
+      dealId: activeIntent.id,
+      type: 'fingerprint_generated',
+      title: 'Contract Fingerprint Computed',
+      description: `Generated SHA-256 fingerprint: ${report.dealFingerprint}`,
+      actor: 'intentlock_engine',
+      metadata: {
+        fingerprint: report.dealFingerprint,
+      },
+    });
 
     // Record audit event
     logAuditEvent({
@@ -225,13 +278,50 @@ export function App() {
       },
     });
 
+    if (String(report.status).toUpperCase() === 'VERIFIED') {
+      const appr = ApprovalManager.createApprovalRequest(report);
+      setApprovalRecord(appr);
+      logAuditEvent({
+        dealId: activeIntent.id,
+        type: 'human_approval_requested',
+        title: 'Explicit Human Approval Requested',
+        description: 'Deal verified. Awaiting human confirmation before payment authorization can be granted.',
+        actor: 'intentlock_engine',
+        metadata: {
+          approvalId: appr.approvalId,
+          expiresAt: appr.expiresAt,
+        },
+      });
+    } else {
+      setApprovalRecord(null);
+      if (String(report.status).toUpperCase() === 'REJECTED') {
+        logAuditEvent({
+          dealId: activeIntent.id,
+          type: 'deal_rejected',
+          title: 'Deal Rejected by Security Gateway',
+          description: report.rejectionReasons?.join('; ') || 'Hard constraint violations detected.',
+          actor: 'intentlock_engine',
+        });
+      } else {
+        logAuditEvent({
+          dealId: activeIntent.id,
+          type: 'review_required',
+          title: 'Review Required on Uncertain Items',
+          description: report.summary,
+          actor: 'intentlock_engine',
+        });
+      }
+    }
+
+    setAuthorizationToken(undefined);
+
     // Update deal status in list
     setDeals((prev) =>
       prev.map((d) => {
         if (d.intent.id === activeIntent.id || d.id === 'deal-001') {
           return {
             ...d,
-            status: report.status === 'verified' ? 'verified' : 'rejected',
+            status: report.status.toLowerCase() === 'verified' ? 'verified' : 'rejected',
             updatedAt: new Date().toISOString(),
           };
         }
@@ -240,6 +330,51 @@ export function App() {
     );
 
     setCurrentView('intentlock');
+  };
+
+  // Handler: User explicitly approves the deal
+  const handleUserApprove = () => {
+    if (!approvalRecord || !finalDeal) return;
+    try {
+      const result = ApprovalManager.approveDeal(approvalRecord, finalDeal);
+      setApprovalRecord(result.approval);
+      setAuthorizationToken(result.authorizationToken);
+
+      logAuditEvent({
+        dealId: activeIntent.id,
+        type: 'approval_granted',
+        title: 'Human Purchase Approval Granted',
+        description: `User authorized transaction. Single-use token issued: ${result.authorizationToken}`,
+        actor: 'user',
+        metadata: {
+          token: result.authorizationToken,
+          fingerprint: approvalRecord.dealFingerprint,
+        },
+      });
+    } catch (err) {
+      logAuditEvent({
+        dealId: activeIntent.id,
+        type: 'approval_invalidated',
+        title: 'Approval Invalidation Error',
+        description: err instanceof Error ? err.message : 'Approval failed',
+        actor: 'intentlock_engine',
+      });
+    }
+  };
+
+  // Handler: User explicitly declines the deal
+  const handleUserDecline = () => {
+    if (!approvalRecord) return;
+    const updated = ApprovalManager.declineDeal(approvalRecord);
+    setApprovalRecord(updated);
+
+    logAuditEvent({
+      dealId: activeIntent.id,
+      type: 'approval_declined',
+      title: 'Human Purchase Approval Declined',
+      description: 'User explicitly declined terms. Payment authorization rejected.',
+      actor: 'user',
+    });
   };
 
   // Reset demo events
@@ -303,6 +438,11 @@ export function App() {
           <VerificationPage
             report={verificationReport}
             intent={activeIntent}
+            deal={finalDeal || undefined}
+            approvalRecord={approvalRecord}
+            onApprove={handleUserApprove}
+            onDecline={handleUserDecline}
+            authorizationToken={authorizationToken}
             onReturnToNegotiation={() => setCurrentView('negotiation')}
             onReturnToWorkspace={() => setCurrentView('workspace')}
           />

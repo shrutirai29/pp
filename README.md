@@ -1,42 +1,55 @@
-# DealMind + IntentLock: Autonomous Deal Agent & Security Quarantine Layer
+# DealMind + IntentLock: Autonomous Deal Agent & Transaction Security Gateway
 
-> **Phase 2: Intelligent Buyer Agent & Negotiation Engine**  
+> **Phase 3: Independent Transaction Security Gateway**  
 > Built for the AI Commerce & Security Hackathon.
 
-DealMind is an autonomous shopping and negotiation system designed to evaluate real-time product offers, rank eligible merchant bids, and negotiate pricing and fulfillment terms on behalf of buyers. To prevent non-compliant purchases, DealMind is paired with **IntentLock™**—an independent verification layer that audits the structured final deal terms against the buyer's non-negotiable intent before any checkout can be authorized.
+DealMind is an autonomous shopping and negotiation system designed to evaluate real-time product offers, rank eligible merchant bids, and negotiate pricing and fulfillment terms on behalf of buyers. To ensure compliance, DealMind is paired with **IntentLock™**—an independent transaction security gateway that audits the complete seller-approved final deal against the buyer's original non-negotiable intent before payment can be authorized.
 
 ---
 
-## 1. What's New in Phase 2: Intelligent Multi-Agent Negotiation
+## 1. Phase 3 Architecture: Transaction Security Gateway
 
-In Phase 1, negotiation was simulated with a static 4-message script. **Phase 2 replaces this with a stateful, modular multi-agent negotiation system**:
+In Phase 3, IntentLock is elevated into an independent security layer separated from the buyer agent:
 
-- **Intelligent Buyer Agent (`src/lib/agents/buyerAgent.ts`):**
-  - Formulates rational opening bids (10%–14% target discounts bounded by buyer budget).
-  - Evaluates seller counteroffers round-by-round.
-  - Explains every negotiation decision with strategic reasoning (`decisionRationale`).
-  - **Zero Compromise on Hard Constraints:** Immediately rejects counteroffers that specify non-new conditions, attached recurring subscriptions, delivery delays beyond the cutoff, or total prices exceeding the budget.
-  - Never trades away hard non-negotiable constraints in exchange for a lower price.
+- **Complete Deal Verification (`src/lib/intentlock/policyEngine.ts`):**
+  - Audits the complete `FinalDeal` contract rather than detached pricing.
+  - Independently recalculates total payables ($\text{productPrice} + \text{deliveryFee} + \text{otherCharges}$) to block math tampering or hidden surcharge manipulation.
+  - Validates all 9 critical security categories:
+    1. **Transaction Status:** Rejects unaccepted, failed, or timed-out negotiations.
+    2. **Currency Invariance:** Requires currency match between user authorization and merchant quotation.
+    3. **Product Integrity:** Checks SKU/title identity to detect unexpected specification changes.
+    4. **Condition Verification:** Enforces strict new condition rules.
+    5. **Budget Ceiling:** Enforces hard budget ceilings on independently recalculated totals.
+    6. **Delivery Window:** Enforces fulfillment calendar limits against actual seller terms.
+    7. **Recurring Charge Quarantine:** Blocks hidden subscription lock-in.
+    8. **Fee Transparency:** Rejects unitemized or unexplained secondary fees.
+    9. **Warranty Coverage:** Flags missing warranty terms as `NEEDS_REVIEW`; rejects substandard coverage.
 
-- **Simulated Seller Policies (`src/lib/agents/sellerAgent.ts` & `src/types/sellerPolicy.ts`):**
-  - Private seller policy data (e.g., `privateMinimumAcceptablePrice`) is strictly kept separate from buyer-visible offer data.
-  - Three distinct seller behavior archetypes:
-    1. **Flexible Seller (e.g. TechHaven Direct):** High-volume enterprise vendor. Welcomes verified fast settlement and makes balanced concessions towards the buyer's bid down to reservation floor.
-    2. **Strict Seller (e.g. Titan Silicon Direct):** Fixed distributor policy. Makes small token concessions and firmly rejects bids below its private minimum floor.
-    3. **Conditional Seller (e.g. Prime Storage Solutions):** Concedes on delivery charges (waiving ₹200 shipping fee) and extends warranty duration in exchange for purchase commitment.
+- **Cryptographic Contract Fingerprinting (`src/lib/intentlock/transactionIntegrity.ts`):**
+  - Generates a canonical, deterministic SHA-256 fingerprint over all security-relevant fields.
+  - Volatile UI fields, timestamps, and conversational transcripts are excluded.
+  - Any post-verification alteration (price, delivery, subscription, warranty, currency) mutates the fingerprint.
 
-- **Stateful Negotiation Engine (`src/lib/agents/negotiationEngine.ts`):**
-  - Multi-round negotiation protocol capped at 5 rounds.
-  - Rejection or maximum round timeout safely ends negotiation with clear failure rationale.
-  - Rule 11 Enforcement: Ineligible seller offers are blocked from entering negotiation.
-
-- **Structured `FinalDeal` Data Model (`src/types/negotiation.ts`):**
-  - Comprehensive contract representation containing product title, seller ID, condition, product price, delivery fee, mandatory charges, total payable, delivery estimate, warranty, subscription status, round count, and complete message transcript.
-  - Safe integer/minor-unit currency calculations to eliminate floating-point inaccuracies.
-
-- **IntentLock™ Architectural Integration (`src/lib/mockVerification.ts`):**
-  - IntentLock now audits the complete negotiated `FinalDeal` object directly (rather than testing pre-negotiation offer fields with a detached price).
-  - Preserves independent security boundaries: buyer agent agreement does not bypass IntentLock audit.
+- **Explicit Human Approval State Machine (`src/lib/intentlock/approvalManager.ts`):**
+  ```
+  NEGOTIATED ──► VERIFYING ──┬──► REJECTED (violations detected)
+                             ├──► NEEDS_REVIEW (missing evidence)
+                             └──► VERIFIED
+                                    │
+                                    ▼
+                         AWAITING_USER_APPROVAL
+                                    │
+                         ┌──────────┴──────────┐
+                         ▼                     ▼
+                      DECLINED              APPROVED
+                                               │
+                                               ▼
+                                       PAYMENT_AUTHORIZED (One-Time Token)
+  ```
+  - **No Autonomous Payment Authorization:** The buyer agent cannot approve transactions on the user's behalf.
+  - **Fingerprint Binding:** Approvals are cryptographically bound to the exact deal fingerprint. Any post-verification term changes invalidate the approval immediately.
+  - **Expiration TTL:** Approval requests expire after 15 minutes.
+  - **One-Time Token Consumption:** Issued authorization tokens can only be consumed once, preventing replay attacks.
 
 ---
 
@@ -45,7 +58,7 @@ In Phase 1, negotiation was simulated with a static 4-message script. **Phase 2 
 - **Frontend:** React 18 + Vite + TypeScript (Strict Mode)
 - **Styling:** Tailwind CSS (Fintech navy foundation with electric-blue & violet accents)
 - **Icons:** Lucide React
-- **Unit Testing:** Vitest (21 automated tests covering business rules and multi-agent negotiation)
+- **Unit Testing:** Vitest (50 automated tests across all 3 phases)
 
 ---
 
@@ -56,28 +69,35 @@ src/
 ├── components/
 │   ├── audit/           # AuditTimeline.tsx
 │   ├── deals/           # DealCard, OfferComparisonCard, OriginalRequirementsCard
-│   ├── intentlock/      # VerificationReportCard, CheckDetailItem
+│   ├── intentlock/      # VerificationReportCard, CheckDetailItem, ApprovalModal
 │   ├── layout/          # Navbar, Footer
-│   ├── negotiation/     # NegotiationTimeline (Multi-agent stream, rationales, final deal card)
+│   ├── negotiation/     # NegotiationTimeline
 │   └── ui/              # Badge, Button, StatusIndicator, NotificationBanner
 ├── data/
 │   ├── mockAuditEvents.ts
-│   ├── mockOffers.ts         # Includes Flexible, Conditional, and Disqualified merchants
+│   ├── mockOffers.ts
 │   ├── mockProducts.ts
-│   └── mockSellerPolicies.ts # Private seller reservation prices and profile policies
+│   └── mockSellerPolicies.ts
 ├── lib/
 │   ├── agents/
-│   │   ├── buyerAgent.ts          # Intelligent buyer agent decision engine
+│   │   ├── buyerAgent.ts          # Buyer agent strategy & constraint protection
 │   │   ├── sellerAgent.ts         # Seller agent simulator (Flexible, Strict, Conditional)
 │   │   ├── negotiationEngine.ts   # Multi-round protocol coordinator (Max 5 rounds)
-│   │   └── negotiationStrategy.ts # Concession pacing and opening bid calculation
+│   │   └── negotiationStrategy.ts # Opening discount calculation & concession pacing
+│   ├── intentlock/
+│   │   ├── intentVerifier.ts      # Orchestrates independent verification report generation
+│   │   ├── policyEngine.ts        # 9 independent policy check implementations
+│   │   ├── transactionIntegrity.ts# Canonical serialization & SHA-256 fingerprint generator
+│   │   ├── approvalManager.ts     # Human approval lifecycle state machine
+│   │   └── verificationTypes.ts   # Canonical deal data, approval records, verification report
 │   ├── __tests__/
-│   │   ├── businessRules.test.ts    # Phase 1 constraint tests (8 tests)
-│   │   └── phase2Negotiation.test.ts# Phase 2 multi-agent tests (13 tests)
+│   │   ├── businessRules.test.ts        # Phase 1 constraint tests (8 tests)
+│   │   ├── phase2Negotiation.test.ts    # Phase 2 multi-agent tests (16 tests)
+│   │   └── phase3SecurityGateway.test.ts# Phase 3 gateway & integrity tests (26 tests)
 │   ├── currency.ts
-│   ├── dealScoring.ts         # Scorer and enhanced offer ranking
-│   ├── mockNegotiation.ts     # Backward-compatible negotiation entry point
-│   ├── mockVerification.ts    # IntentLock verification engine (audits FinalDeal)
+│   ├── dealScoring.ts
+│   ├── mockNegotiation.ts
+│   ├── mockVerification.ts
 │   └── validation.ts
 ├── pages/               # Dashboard, FindDeal, DealWorkspace, Negotiation, Verification, AuditTrail
 ├── types/               # deal.ts, offer.ts, negotiation.ts, sellerPolicy.ts, verification.ts, audit.ts
@@ -94,7 +114,7 @@ src/
 # 1. Install dependencies
 npm install
 
-# 2. Run unit tests (21 tests)
+# 2. Run unit tests (50 tests passing)
 npm test
 
 # 3. Start local development server
@@ -107,46 +127,52 @@ npm run build
 
 ---
 
-## 5. Phase 2 Automated Test Coverage (21 Tests)
+## 5. Automated Vitest Suite (50 Tests Passing)
 
 ```
 ✓ src/lib/__tests__/businessRules.test.ts (8 tests)
-  ✓ calculates total price from base, delivery, and mandatory charges
-  ✓ accepts a fully compliant offer as eligible and passes IntentLock verification
-  ✓ rejects a refurbished product when new is required (Rule 4)
-  ✓ rejects an offer whose total price exceeds the budget ceiling (Rule 6)
-  ✓ rejects an offer with delivery time beyond the maximum limit (Rule 5)
-  ✓ rejects an offer with a subscription when user prohibits subscriptions (Rule 3)
-  ✓ flags missing warranty information as Needs Review (Rule 7)
-  ✓ cheaper listing price NEVER overrides a hard constraint (Rules 8, 9, 11)
-
-✓ src/lib/__tests__/phase2Negotiation.test.ts (13 tests)
-  ✓ 1. Flexible seller accepts a reasonable offer above its private minimum
-  ✓ 2. Strict seller rejects an offer below its private minimum floor
-  ✓ 3. Conditional seller can negotiate delivery terms by waiving delivery fee
-  ✓ 4. Buyer agent never exceeds the user's hard budget
-  ✓ 5. Buyer agent rejects a counteroffer with refurbished condition when new is mandatory
-  ✓ 6. Buyer agent rejects a counteroffer that introduces a recurring subscription
-  ✓ 7. Negotiation stops after a maximum of five rounds
-  ✓ 8. Immediate seller rejection terminates the negotiation session
-  ✓ 9. Final deal total payable strictly equals product price + delivery fee + mandatory charges
-  ✓ 10. Produces a complete structured FinalDeal with all required parameters for IntentLock
-  ✓ 11. An ineligible seller offer cannot enter negotiation
-  ✓ 12. A failed negotiation never produces an accepted final deal
-  ✓ Enhanced Ranking: Eligible offers always outrank ineligible ones regardless of price
+✓ src/lib/__tests__/phase2Negotiation.test.ts (16 tests)
+✓ src/lib/__tests__/phase3SecurityGateway.test.ts (26 tests)
+  ✓ 1. Valid seller-accepted FinalDeal passes all IntentLock security checks
+  ✓ 2. Unaccepted seller agreement (isAcceptedBySeller: false) fails verification
+  ✓ 3. Failed negotiation is rejected
+  ✓ 4. Timeout negotiation (5 rounds exceeded) is rejected
+  ✓ 5. Deal exceeding budget ceiling is rejected
+  ✓ 6. Recalculated total mismatch (tampered totalPayable) is rejected immediately
+  ✓ 7. Currency mismatch between user intent and deal is rejected
+  ✓ 8. Refurbished condition violates new-only intent and is rejected
+  ✓ 9. Delivery beyond authorized maximum is rejected
+  ✓ 10. Subscription violation is rejected when user prohibited subscriptions
+  ✓ 11. Missing subscription terms require review when subscription is flagged
+  ✓ 12. Missing warranty declaration requires review (never auto-passes)
+  ✓ 13. Warranty duration below required minimum is rejected
+  ✓ 14. Mandatory charge with missing description is flagged as fee violation
+  ✓ 15. Fingerprint remains stable and deterministic for equivalent canonical objects
+  ✓ 16. Price alteration changes fingerprint
+  ✓ 17. Delivery alteration changes fingerprint
+  ✓ 18. Subscription status alteration changes fingerprint
+  ✓ 19. Warranty alteration changes fingerprint
+  ✓ 20. Unverified deals (Rejected or Needs Review) cannot request user approval
+  ✓ 21. User can explicitly approve a verified deal and receive a payment authorization token
+  ✓ 22. User can explicitly decline a verified deal
+  ✓ 23. Expired approval cannot be consumed or approved
+  ✓ 24. Modifying transaction terms after report generation invalidates approval binding
+  ✓ 25. An authorization token can only be consumed once at checkout (replay prevention)
+  ✓ 26. Failed negotiation cannot produce payment authorization under any circumstances
 ```
 
 ---
 
-## 6. Phase 2 Status: Functional vs. Simulated
+## 6. Phase 3 Status: Functional vs. Simulated
 
-| Feature / Module | Status | Notes |
+| Security Capability | Implementation Status | Technical Reality |
 | :--- | :--- | :--- |
-| **Multi-Agent Negotiation Engine** | **Functional** | Real-time state machine coordinating Buyer and Seller Agent decisions up to 5 rounds |
-| **Buyer Agent Reasoning** | **Functional** | Concession calculation, hard-constraint protection, strategic rationales |
-| **Seller Behavior Profiles** | **Functional** | Flexible, Strict, and Conditional policies with private reservation floors |
-| **FinalDeal Contract Model** | **Functional** | Complete structured deal passed to IntentLock with price and non-price terms |
-| **IntentLock Verification** | **Functional** | Independent cryptographic audit of the complete `FinalDeal` |
-| **Seller Catalogue & APIs** | **Simulated** | Controlled catalogue and simulated seller agents (no real retailer scraping in Phase 2) |
-| **LLM Inference** | **Simulated** | Rule- and policy-based agent simulation; ready for Node.js LLM service in Phase 3 |
-| **PayPal Sandbox** | **Scheduled** | Reserved for Phase 4 backend integration |
+| **Independent Verification Engine** | **Functional** | Evaluates all 9 hard requirements directly on FinalDeal |
+| **Total Recalculation Guard** | **Functional** | Independently calculates productPrice + fees; rejects mathematical inconsistencies |
+| **Bilateral Acceptance Check** | **Functional** | Rejects any unagreed, failed, or timed-out negotiation session |
+| **SHA-256 Contract Fingerprint** | **Functional** | Deterministic canonical serialization hashing security-relevant terms |
+| **Human Approval Gate** | **Functional** | Requires user confirmation; supports approval, decline, and expiration |
+| **Replay & One-Time Token Guard** | **Functional** | Single-use consumption token bound to exact contract fingerprint |
+| **Tamper Invalidation** | **Functional** | Modifying terms post-verification invalidates approval immediately |
+| **Cryptographic Root of Trust** | **Demonstration Model** | In-browser SHA-256 demonstrates integrity logic. Authoritative protection requires a trusted server backend holding cryptographic keys |
+| **PayPal Sandbox Gateway** | **Scheduled** | Reserved for Phase 4 backend integration |

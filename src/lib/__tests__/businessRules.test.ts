@@ -59,7 +59,7 @@ describe('DealMind & IntentLock Business Rules', () => {
     expect(scored.offer.eligibilityStatus).toBe('eligible');
 
     const report = verifyDealWithIntentLock(baseMockIntent, baseCompliantOffer, 7000);
-    expect(report.status).toBe('verified');
+    expect(report.status.toUpperCase()).toBe('VERIFIED');
     expect(report.failedCount).toBe(0);
   });
 
@@ -76,7 +76,7 @@ describe('DealMind & IntentLock Business Rules', () => {
     expect(scored.violations.some((v) => v.includes("condition is 'refurbished'"))).toBe(true);
 
     const report = verifyDealWithIntentLock(baseMockIntent, refurbishedOffer);
-    expect(report.status).toBe('rejected');
+    expect(report.status.toUpperCase()).toBe('REJECTED');
     const conditionCheck = report.checks.find((c) => c.category === 'condition');
     expect(conditionCheck?.status).toBe('failed');
   });
@@ -96,7 +96,7 @@ describe('DealMind & IntentLock Business Rules', () => {
     expect(scored.violations.some((v) => v.includes('exceeds your maximum budget'))).toBe(true);
 
     const report = verifyDealWithIntentLock(baseMockIntent, overBudgetOffer);
-    expect(report.status).toBe('rejected');
+    expect(report.status.toUpperCase()).toBe('REJECTED');
     const budgetCheck = report.checks.find((c) => c.category === 'budget');
     expect(budgetCheck?.status).toBe('failed');
   });
@@ -114,7 +114,7 @@ describe('DealMind & IntentLock Business Rules', () => {
     expect(scored.violations.some((v) => v.includes('exceeds your maximum allowed limit of 3 days'))).toBe(true);
 
     const report = verifyDealWithIntentLock(baseMockIntent, slowDeliveryOffer);
-    expect(report.status).toBe('rejected');
+    expect(report.status.toUpperCase()).toBe('REJECTED');
     const deliveryCheck = report.checks.find((c) => c.category === 'delivery');
     expect(deliveryCheck?.status).toBe('failed');
   });
@@ -133,7 +133,7 @@ describe('DealMind & IntentLock Business Rules', () => {
     expect(scored.violations.some((v) => v.includes('recurring subscription'))).toBe(true);
 
     const report = verifyDealWithIntentLock(baseMockIntent, subscriptionOffer);
-    expect(report.status).toBe('rejected');
+    expect(report.status.toUpperCase()).toBe('REJECTED');
     const subCheck = report.checks.find((c) => c.category === 'subscription');
     expect(subCheck?.status).toBe('failed');
   });
@@ -151,7 +151,7 @@ describe('DealMind & IntentLock Business Rules', () => {
     expect(scored.missingInfo.some((m) => m.includes('Warranty duration is unspecified'))).toBe(true);
 
     const report = verifyDealWithIntentLock(baseMockIntent, missingWarrantyOffer);
-    expect(report.status).toBe('needs_review');
+    expect(report.status.toUpperCase()).toBe('NEEDS_REVIEW');
     const warrantyCheck = report.checks.find((c) => c.category === 'warranty');
     expect(warrantyCheck?.status).toBe('needs_review');
   });
@@ -188,7 +188,7 @@ describe('DealMind & IntentLock Business Rules', () => {
 
     // Rule 11: Ineligible offer fails IntentLock and cannot pass
     const report = verifyDealWithIntentLock(baseMockIntent, cheapTrappingOffer);
-    expect(report.status).toBe('rejected');
+    expect(report.status.toUpperCase()).toBe('REJECTED');
     expect(report.failedCount).toBeGreaterThanOrEqual(2);
   });
 });

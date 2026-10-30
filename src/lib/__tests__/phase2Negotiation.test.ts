@@ -501,10 +501,10 @@ describe('Phase 2: Intelligent Buyer Agent and Negotiation Engine', () => {
     const report = verifyDealWithIntentLock(mockIntent, unagreedDeal);
 
     // IntentLock MUST reject this unagreed deal
-    expect(report.status).toBe('rejected');
-    const agreementCheck = report.checks.find((c) => c.id === 'chk-negotiation-acceptance');
+    expect(report.status.toUpperCase()).toBe('REJECTED');
+    const agreementCheck = report.checks.find((c) => c.id === 'chk-transaction-status' || c.id === 'chk-negotiation-acceptance');
     expect(agreementCheck).toBeDefined();
     expect(agreementCheck?.status).toBe('failed');
-    expect(agreementCheck?.details).toContain('IntentLock explicitly rejects unagreed or non-accepted deals');
+    expect(agreementCheck?.details).toContain('negotiations cannot proceed');
   });
 });

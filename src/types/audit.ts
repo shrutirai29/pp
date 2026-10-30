@@ -13,8 +13,15 @@ export type AuditEventType =
   | 'negotiation_concluded' 
   | 'verification_started' 
   | 'verification_completed' 
+  | 'fingerprint_generated'
   | 'deal_verified' 
   | 'deal_rejected' 
+  | 'review_required'
+  | 'human_approval_requested'
+  | 'approval_granted'
+  | 'approval_declined'
+  | 'approval_expired'
+  | 'approval_invalidated'
   | 'checkout_attempted';
 
 export interface AuditEvent {

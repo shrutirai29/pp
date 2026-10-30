@@ -1,11 +1,17 @@
 import React from 'react';
-import { VerificationReport } from '../types/verification';
+import { VerificationReport, UserApprovalRecord } from '../types/verification';
 import { UserIntent } from '../types/deal';
+import { FinalDeal } from '../types/negotiation';
 import { VerificationReportCard } from '../components/intentlock/VerificationReportCard';
 
 interface VerificationPageProps {
   report: VerificationReport;
   intent: UserIntent;
+  deal?: FinalDeal;
+  approvalRecord?: UserApprovalRecord | null;
+  onApprove?: () => void;
+  onDecline?: () => void;
+  authorizationToken?: string;
   onReturnToNegotiation: () => void;
   onReturnToWorkspace: () => void;
 }
@@ -13,6 +19,11 @@ interface VerificationPageProps {
 export const VerificationPage: React.FC<VerificationPageProps> = ({
   report,
   intent,
+  deal,
+  approvalRecord,
+  onApprove,
+  onDecline,
+  authorizationToken,
   onReturnToNegotiation,
   onReturnToWorkspace,
 }) => {
@@ -21,6 +32,11 @@ export const VerificationPage: React.FC<VerificationPageProps> = ({
       <VerificationReportCard
         report={report}
         intent={intent}
+        deal={deal}
+        approvalRecord={approvalRecord}
+        onApprove={onApprove}
+        onDecline={onDecline}
+        authorizationToken={authorizationToken}
         onReturnToNegotiation={onReturnToNegotiation}
         onReturnToWorkspace={onReturnToWorkspace}
       />

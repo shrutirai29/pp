@@ -20,9 +20,9 @@ export const Footer: React.FC = () => {
 
           <div className="flex items-center gap-6 text-slate-400">
             <span className="flex items-center gap-1">
-              <span>Phase 1 Frontend MVP</span>
+              <span>Phase 3 Security Gateway</span>
               <span className="h-1.5 w-1.5 rounded-full bg-electric-400" />
-              <span className="text-slate-500">Fictional Catalog & Deterministic Simulation</span>
+              <span className="text-slate-500">Cryptographic Fingerprints & Human Approval Gate</span>
             </span>
             <span className="hidden sm:inline text-navy-700">|</span>
             <span className="text-slate-500">

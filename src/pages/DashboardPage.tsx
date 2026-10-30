@@ -42,10 +42,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           <div className="flex items-center gap-2">
             <span className="flex h-2 w-2 rounded-full bg-electric-400" />
             <span className="text-xs font-semibold uppercase tracking-wider text-electric-400">
-              Autonomous Deal Agent & Security Quarantine
+              Autonomous Deal Agent & IntentLock Security Gateway
             </span>
             <Badge variant="outline" size="sm" className="font-mono text-[10px]">
-              Phase 1 MVP
+              Phase 3 Independent Gateway
             </Badge>
           </div>
 
