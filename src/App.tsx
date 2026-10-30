@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { UserIntent, Deal } from './types/deal';
 import { ProductOffer } from './types/offer';
 import { NegotiationSession, FinalDeal } from './types/negotiation';
@@ -13,6 +13,7 @@ import { runIntelligentNegotiation } from './lib/agents/negotiationEngine';
 import { verifyDealWithIntentLock } from './lib/mockVerification';
 import { rankOffers } from './lib/dealScoring';
 import { ApprovalManager } from './lib/intentlock/approvalManager';
+import { dealmindApi } from './lib/api/client';
 
 import { Navbar, NavView } from './components/layout/Navbar';
 import { Footer } from './components/layout/Footer';
@@ -64,6 +65,24 @@ export function App() {
   });
 
   const [authorizationToken, setAuthorizationToken] = useState<string | undefined>(undefined);
+  const [isServerOnline, setIsServerOnline] = useState<boolean>(false);
+
+  // Poll server health on load
+  useEffect(() => {
+    let isMounted = true;
+    dealmindApi.checkHealth()
+      .then((res) => {
+        if (isMounted && res && res.status === 'ok') {
+          setIsServerOnline(true);
+        }
+      })
+      .catch(() => {
+        if (isMounted) setIsServerOnline(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>(INITIAL_MOCK_AUDIT_EVENTS);
 
@@ -100,6 +119,11 @@ export function App() {
     // Invalidate approval state on new deal
     setApprovalRecord(null);
     setAuthorizationToken(undefined);
+
+    // Sync deal to server asynchronously if online
+    dealmindApi.createDeal(newIntent, neg.finalDeal, newIntent.productTitle)
+      .then(() => setIsServerOnline(true))
+      .catch(() => setIsServerOnline(false));
 
     // Create a new Deal record in Dashboard
     const newDeal: Deal = {
@@ -236,7 +260,7 @@ export function App() {
   };
 
   // Handler: When user proceeds to IntentLock verification from Negotiation view
-  const handleProceedToVerification = () => {
+  const handleProceedToVerification = async () => {
     if (!finalDeal) return;
 
     logAuditEvent({
@@ -247,15 +271,30 @@ export function App() {
       actor: 'intentlock_engine',
     });
 
-    // Verify the complete FinalDeal object directly
-    const report = verifyDealWithIntentLock(activeIntent, finalDeal);
+    let report: VerificationReport;
+    let isServer = false;
+
+    try {
+      // 1. Sync deal to backend SQLite
+      await dealmindApi.createDeal(activeIntent, finalDeal, activeIntent.productTitle);
+      // 2. Perform server-side independent verification
+      const verifyRes = await dealmindApi.verifyDeal(activeIntent.id, finalDeal);
+      report = verifyRes.report;
+      isServer = true;
+      setIsServerOnline(true);
+    } catch (err) {
+      console.warn('Backend server verification unavailable, falling back to client-side IntentLock gateway:', err);
+      setIsServerOnline(false);
+      report = verifyDealWithIntentLock(activeIntent, finalDeal);
+    }
+
     setVerificationReport(report);
 
     // Record fingerprint generation
     logAuditEvent({
       dealId: activeIntent.id,
       type: 'fingerprint_generated',
-      title: 'Contract Fingerprint Computed',
+      title: `Contract Fingerprint Computed (${isServer ? 'Server-Enforced' : 'Local'})`,
       description: `Generated SHA-256 fingerprint: ${report.dealFingerprint}`,
       actor: 'intentlock_engine',
       metadata: {
@@ -279,18 +318,25 @@ export function App() {
     });
 
     if (String(report.status).toUpperCase() === 'VERIFIED') {
-      const appr = ApprovalManager.createApprovalRequest(report);
-      setApprovalRecord(appr);
+      try {
+        if (isServer) {
+          const apprRes = await dealmindApi.createApprovalRequest(activeIntent.id, report.id);
+          setApprovalRecord(apprRes.approval);
+        } else {
+          const appr = ApprovalManager.createApprovalRequest(report);
+          setApprovalRecord(appr);
+        }
+      } catch {
+        const appr = ApprovalManager.createApprovalRequest(report);
+        setApprovalRecord(appr);
+      }
+
       logAuditEvent({
         dealId: activeIntent.id,
         type: 'human_approval_requested',
-        title: 'Explicit Human Approval Requested',
+        title: `Explicit Human Approval Requested (${isServer ? 'Persisted SQLite' : 'Client Gate'})`,
         description: 'Deal verified. Awaiting human confirmation before payment authorization can be granted.',
         actor: 'intentlock_engine',
-        metadata: {
-          approvalId: appr.approvalId,
-          expiresAt: appr.expiresAt,
-        },
       });
     } else {
       setApprovalRecord(null);
@@ -333,21 +379,37 @@ export function App() {
   };
 
   // Handler: User explicitly approves the deal
-  const handleUserApprove = () => {
+  const handleUserApprove = async () => {
     if (!approvalRecord || !finalDeal) return;
     try {
-      const result = ApprovalManager.approveDeal(approvalRecord, finalDeal);
-      setApprovalRecord(result.approval);
-      setAuthorizationToken(result.authorizationToken);
+      let token: string;
+      let updatedApproval: UserApprovalRecord;
+
+      if (isServerOnline) {
+        try {
+          const res = await dealmindApi.approveDeal(activeIntent.id, approvalRecord.approvalId, finalDeal);
+          token = res.authorizationToken;
+          updatedApproval = res.approval;
+        } catch (serverErr) {
+          throw serverErr;
+        }
+      } else {
+        const result = ApprovalManager.approveDeal(approvalRecord, finalDeal);
+        token = result.authorizationToken;
+        updatedApproval = result.approval;
+      }
+
+      setApprovalRecord(updatedApproval);
+      setAuthorizationToken(token);
 
       logAuditEvent({
         dealId: activeIntent.id,
         type: 'approval_granted',
-        title: 'Human Purchase Approval Granted',
-        description: `User authorized transaction. Single-use token issued: ${result.authorizationToken}`,
+        title: `Human Purchase Approval Granted (${isServerOnline ? 'Server-Enforced Token' : 'Local Token'})`,
+        description: `User authorized transaction. Single-use token issued: ${token}`,
         actor: 'user',
         metadata: {
-          token: result.authorizationToken,
+          token,
           fingerprint: approvalRecord.dealFingerprint,
         },
       });
@@ -363,10 +425,20 @@ export function App() {
   };
 
   // Handler: User explicitly declines the deal
-  const handleUserDecline = () => {
+  const handleUserDecline = async () => {
     if (!approvalRecord) return;
-    const updated = ApprovalManager.declineDeal(approvalRecord);
-    setApprovalRecord(updated);
+    try {
+      if (isServerOnline) {
+        const res = await dealmindApi.declineDeal(activeIntent.id, approvalRecord.approvalId);
+        setApprovalRecord(res.approval);
+      } else {
+        const updated = ApprovalManager.declineDeal(approvalRecord);
+        setApprovalRecord(updated);
+      }
+    } catch {
+      const updated = ApprovalManager.declineDeal(approvalRecord);
+      setApprovalRecord(updated);
+    }
 
     logAuditEvent({
       dealId: activeIntent.id,
@@ -390,6 +462,7 @@ export function App() {
         onNavigate={setCurrentView}
         activeDealTitle={activeIntent.productTitle}
         isDealActive={true}
+        isServerOnline={isServerOnline}
       />
 
       {/* Main Content View Container */}

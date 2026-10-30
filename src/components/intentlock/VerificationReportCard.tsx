@@ -100,7 +100,7 @@ export const VerificationReportCard: React.FC<VerificationReportCardProps> = ({
                   IntentLock™ Transaction Security Gateway
                 </span>
                 <span className="text-[10px] text-slate-500 font-mono bg-navy-950 px-1.5 py-0.5 rounded border border-navy-800">
-                  Phase 3 Independent Gateway
+                  Phase 4 Persistent Security Gateway
                 </span>
               </div>
 
@@ -367,12 +367,12 @@ export const VerificationReportCard: React.FC<VerificationReportCardProps> = ({
                   leftIcon={<CreditCard className="h-4 w-4" />}
                   className="bg-navy-800 border-navy-700 text-slate-400 cursor-not-allowed opacity-75"
                 >
-                  Proceed to PayPal Checkout (Phase 4)
+                  Proceed to PayPal Checkout (Phase 5)
                 </Button>
                 <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-72 rounded-lg bg-navy-950 border border-navy-700 p-2.5 text-xs text-slate-300 shadow-xl z-50">
                   <p className="font-semibold text-white mb-0.5">PayPal Sandbox Checkout</p>
                   <p className="text-[11px] text-slate-400">
-                    Integration with PayPal Sandbox Gateway will activate in Phase 4. One-time authorization token is ready.
+                    PayPal checkout is reserved for future integration. Single-use transaction authorization token is cryptographically signed and stored in SQLite.
                   </p>
                 </div>
               </div>

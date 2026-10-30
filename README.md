@@ -1,178 +1,219 @@
-# DealMind + IntentLock: Autonomous Deal Agent & Transaction Security Gateway
+# DealMind + IntentLock: Autonomous Deal Agent & Persistent Transaction Security Gateway
 
-> **Phase 3: Independent Transaction Security Gateway**  
+> **Phase 4: Secure Backend, Persistent IntentLock & API Integration**  
 > Built for the AI Commerce & Security Hackathon.
 
-DealMind is an autonomous shopping and negotiation system designed to evaluate real-time product offers, rank eligible merchant bids, and negotiate pricing and fulfillment terms on behalf of buyers. To ensure compliance, DealMind is paired with **IntentLock™**—an independent transaction security gateway that audits the complete seller-approved final deal against the buyer's original non-negotiable intent before payment can be authorized.
+DealMind is an autonomous shopping and negotiation system designed to evaluate real-time product offers, rank eligible merchant bids, and negotiate pricing and fulfillment terms on behalf of buyers. To ensure compliance, DealMind is paired with **IntentLock™**—an independent transaction security gateway that server-enforces and audits the complete seller-approved final deal against the buyer's original non-negotiable intent before payment can be authorized.
+
+In Phase 4, IntentLock is transitioned from a browser-only security model into an authoritative, server-enforced, SQLite-backed security gateway.
 
 ---
 
-## 1. Phase 3 Architecture: Transaction Security Gateway
+## 1. Phase 4 Architecture: Server-Enforced Security & Persistence
 
-In Phase 3, IntentLock is elevated into an independent security layer separated from the buyer agent:
+```
+┌────────────────────────────────────────────────────────┐
+│               Frontend (React 18 + Vite)                │
+│  - Natural Language Intent Capture                     │
+│  - Multi-Agent Negotiation Simulation                   │
+│  - Live Verification Verdict & Audit Visualization     │
+└───────────────────────────┬────────────────────────────┘
+                            │ (REST API with x-user-id isolation)
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│             Secure Express Backend (Node 24)            │
+│  ├── Middleware: Rate Limiter, Auth/Session, Zod Valid  │
+│  ├── IntentLock Policy Engine (9 Server Checks)         │
+│  ├── Cryptographic Service (SHA-256 + HMAC Tokens)      │
+│  └── Repositories: Deals, Reports, Approvals, Audit     │
+└───────────────────────────┬────────────────────────────┘
+                            │ (WAL Mode, ACID Transactions)
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│            SQLite Persistent Storage (Engine)           │
+│  ├── deals (UserIntent + FinalDeal JSON)               │
+│  ├── verification_reports (Fingerprints + Status)       │
+│  ├── approvals (State Machine + Token Hashes + TTL)     │
+│  └── audit_events (Append-Only Immutable Event Log)     │
+└────────────────────────────────────────────────────────┘
+```
 
-- **Complete Deal Verification (`src/lib/intentlock/policyEngine.ts`):**
-  - Audits the complete `FinalDeal` contract rather than detached pricing.
-  - Independently recalculates total payables ($\text{productPrice} + \text{deliveryFee} + \text{otherCharges}$) to block math tampering or hidden surcharge manipulation.
-  - Validates all 9 critical security categories:
-    1. **Transaction Status:** Rejects unaccepted, failed, or timed-out negotiations.
-    2. **Currency Invariance:** Requires currency match between user authorization and merchant quotation.
-    3. **Product Integrity:** Checks SKU/title identity to detect unexpected specification changes.
-    4. **Condition Verification:** Enforces strict new condition rules.
-    5. **Budget Ceiling:** Enforces hard budget ceilings on independently recalculated totals.
-    6. **Delivery Window:** Enforces fulfillment calendar limits against actual seller terms.
-    7. **Recurring Charge Quarantine:** Blocks hidden subscription lock-in.
-    8. **Fee Transparency:** Rejects unitemized or unexplained secondary fees.
-    9. **Warranty Coverage:** Flags missing warranty terms as `NEEDS_REVIEW`; rejects substandard coverage.
-
-- **Cryptographic Contract Fingerprinting (`src/lib/intentlock/transactionIntegrity.ts`):**
-  - Generates a canonical, deterministic SHA-256 fingerprint over all security-relevant fields.
-  - Volatile UI fields, timestamps, and conversational transcripts are excluded.
-  - Any post-verification alteration (price, delivery, subscription, warranty, currency) mutates the fingerprint.
-
-- **Explicit Human Approval State Machine (`src/lib/intentlock/approvalManager.ts`):**
-  ```
-  NEGOTIATED ──► VERIFYING ──┬──► REJECTED (violations detected)
-                             ├──► NEEDS_REVIEW (missing evidence)
-                             └──► VERIFIED
-                                    │
-                                    ▼
-                         AWAITING_USER_APPROVAL
-                                    │
-                         ┌──────────┴──────────┐
-                         ▼                     ▼
-                      DECLINED              APPROVED
-                                               │
-                                               ▼
-                                       PAYMENT_AUTHORIZED (One-Time Token)
-  ```
-  - **No Autonomous Payment Authorization:** The buyer agent cannot approve transactions on the user's behalf.
-  - **Fingerprint Binding:** Approvals are cryptographically bound to the exact deal fingerprint. Any post-verification term changes invalidate the approval immediately.
-  - **Expiration TTL:** Approval requests expire after 15 minutes.
-  - **One-Time Token Consumption:** Issued authorization tokens can only be consumed once, preventing replay attacks.
+### Core Security Principles Enforced on Backend:
+1. **Untrusted Client Inputs:** All input from the browser is validated through strict Zod schemas (`userIntentSchema`, `finalDealSchema`, `approvalRequestSchema`, `userDecisionSchema`).
+2. **Server-Side Policy Engine (`server/src/services/intentLockService.ts`):** 9 independent checks run entirely on the server. The buyer agent in the frontend cannot approve or bypass verification.
+3. **Canonical SHA-256 Fingerprint (`server/src/services/integrityService.ts`):** Security-relevant terms are deterministically ordered and hashed with SHA-256. Any difference in price, fees, warranty, condition, or delivery results in a completely different fingerprint.
+4. **HMAC-SHA256 Authorization Tokens:** When a user explicitly approves a verified deal, the server computes an HMAC-SHA256 signature using a server-side secret (`TOKEN_HMAC_SECRET`). Only token hashes are stored in the database.
+5. **Atomic Replay Prevention:** `POST /api/deals/:id/consume-authorization` executes an atomic SQLite transaction (`BEGIN IMMEDIATE TRANSACTION`). If a token was already consumed, subsequent attempts are rejected with `HTTP 409 Conflict`.
+6. **Post-Verification Tampering Detection:** When the user sends an approval decision, the server re-verifies the fingerprint of the submitted `FinalDeal`. If any parameter changed since verification, the server rejects with `HTTP 400 Bad Request` ("Deal terms have been modified post-verification").
+7. **Session Data Isolation:** Every request is authenticated with an `x-user-id` header, enforcing strict data isolation across different users and sessions.
 
 ---
 
-## 2. Technology Stack
+## 2. API Endpoints
 
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/health` | Server health check and uptime probe |
+| `POST` | `/api/deals` | Register or sync deal intent and final deal parameters |
+| `GET` | `/api/deals` | List deals belonging to the current authenticated user |
+| `GET` | `/api/deals/:id` | Fetch details of a specific deal |
+| `POST` | `/api/deals/:id/verify` | Execute independent server-side IntentLock verification |
+| `GET` | `/api/deals/:id/verification`| Retrieve the latest verification report for a deal |
+| `POST` | `/api/deals/:id/approval-request` | Create an approval request record with 15-minute TTL |
+| `POST` | `/api/deals/:id/approve` | Explicit human purchase authorization (issues HMAC token) |
+| `POST` | `/api/deals/:id/decline` | Explicit human decline of transaction terms |
+| `POST` | `/api/deals/:id/consume-authorization` | Atomically consumes single-use token (replay protection) |
+| `GET` | `/api/deals/:id/audit` | Fetch append-only audit trail records |
+
+---
+
+## 3. Technology Stack
+
+- **Backend:** Node.js 24 + Express + TypeScript
+- **Database:** SQLite (Native `node:sqlite` with WAL mode and foreign key constraints)
+- **Validation:** Zod 3 runtime schemas
+- **Cryptography:** Node.js built-in `crypto` (SHA-256 canonical hashing + HMAC-SHA256 signing)
 - **Frontend:** React 18 + Vite + TypeScript (Strict Mode)
-- **Styling:** Tailwind CSS (Fintech navy foundation with electric-blue & violet accents)
+- **Styling:** Tailwind CSS (Fintech dark navy foundation with electric-blue & violet accents)
 - **Icons:** Lucide React
-- **Unit Testing:** Vitest (50 automated tests across all 3 phases)
+- **Testing:** Vitest (74 automated tests across frontend and backend)
 
 ---
 
-## 3. Directory Structure
+## 4. Directory Structure
 
 ```
-src/
-├── components/
-│   ├── audit/           # AuditTimeline.tsx
-│   ├── deals/           # DealCard, OfferComparisonCard, OriginalRequirementsCard
-│   ├── intentlock/      # VerificationReportCard, CheckDetailItem, ApprovalModal
-│   ├── layout/          # Navbar, Footer
-│   ├── negotiation/     # NegotiationTimeline
-│   └── ui/              # Badge, Button, StatusIndicator, NotificationBanner
-├── data/
-│   ├── mockAuditEvents.ts
-│   ├── mockOffers.ts
-│   ├── mockProducts.ts
-│   └── mockSellerPolicies.ts
-├── lib/
-│   ├── agents/
-│   │   ├── buyerAgent.ts          # Buyer agent strategy & constraint protection
-│   │   ├── sellerAgent.ts         # Seller agent simulator (Flexible, Strict, Conditional)
-│   │   ├── negotiationEngine.ts   # Multi-round protocol coordinator (Max 5 rounds)
-│   │   └── negotiationStrategy.ts # Opening discount calculation & concession pacing
-│   ├── intentlock/
-│   │   ├── intentVerifier.ts      # Orchestrates independent verification report generation
-│   │   ├── policyEngine.ts        # 9 independent policy check implementations
-│   │   ├── transactionIntegrity.ts# Canonical serialization & SHA-256 fingerprint generator
-│   │   ├── approvalManager.ts     # Human approval lifecycle state machine
-│   │   └── verificationTypes.ts   # Canonical deal data, approval records, verification report
-│   ├── __tests__/
-│   │   ├── businessRules.test.ts        # Phase 1 constraint tests (8 tests)
-│   │   ├── phase2Negotiation.test.ts    # Phase 2 multi-agent tests (16 tests)
-│   │   └── phase3SecurityGateway.test.ts# Phase 3 gateway & integrity tests (26 tests)
-│   ├── currency.ts
-│   ├── dealScoring.ts
-│   ├── mockNegotiation.ts
-│   ├── mockVerification.ts
-│   └── validation.ts
-├── pages/               # Dashboard, FindDeal, DealWorkspace, Negotiation, Verification, AuditTrail
-├── types/               # deal.ts, offer.ts, negotiation.ts, sellerPolicy.ts, verification.ts, audit.ts
-├── App.tsx
-├── index.css
-└── main.tsx
+├── server/                              # Node.js + Express Backend
+│   ├── src/
+│   │   ├── config/env.ts                # Validated environment configuration
+│   │   ├── db/
+│   │   │   ├── database.ts              # SQLite schema creation & WAL mode setup
+│   │   │   └── sqliteAdapter.ts         # Native SQLite adapter
+│   │   ├── middleware/
+│   │   │   ├── auth.ts                  # Session user identification (x-user-id)
+│   │   │   ├── errorHandler.ts          # Centralized error handler
+│   │   │   └── rateLimiter.ts           # Sliding-window IP rate limiter
+│   │   ├── repositories/
+│   │   │   ├── dealRepository.ts        # Deal persistence
+│   │   │   ├── verificationRepository.ts# Verification reports storage
+│   │   │   ├── approvalRepository.ts    # Approval state machine & token storage
+│   │   │   └── auditRepository.ts       # Append-only immutable audit trail
+│   │   ├── routes/api.ts                # Express REST API routes
+│   │   ├── schemas/dealSchemas.ts       # Zod schemas for UserIntent and FinalDeal
+│   │   ├── services/
+│   │   │   ├── integrityService.ts      # Canonical hashing & HMAC tokens
+│   │   │   └── intentLockService.ts     # Server policy verification engine
+│   │   ├── app.ts                       # Express app factory
+│   │   └── server.ts                    # HTTP server entrypoint
+│   ├── tests/
+│   │   └── backendSecurity.test.ts      # 24 comprehensive backend security tests
+│   ├── package.json
+│   └── tsconfig.json
+├── src/                                 # React + Vite Frontend
+│   ├── components/                      # Dashboard, Workspace, Negotiation, IntentLock UI
+│   ├── lib/
+│   │   ├── api/client.ts                # Typed API client with graceful fallback
+│   │   ├── agents/                      # Buyer and simulated seller negotiation agents
+│   │   ├── intentlock/                  # Client-side validation models & types
+│   │   └── __tests__/                   # Phase 1, 2, and 3 test suites (50 tests)
+│   ├── pages/                           # Application views
+│   ├── types/                           # TypeScript interfaces
+│   └── App.tsx
+├── package.json
+└── vite.config.ts
 ```
 
 ---
 
-## 4. Running the Application Locally
+## 5. Running the Application Locally
+
+### Quick Start (Full Stack)
 
 ```powershell
-# 1. Install dependencies
+# 1. Install root dependencies
 npm install
 
-# 2. Run unit tests (50 tests passing)
+# 2. Install server dependencies
+cd server
+npm install
+cd ..
+
+# 3. Run all 74 unit and integration tests
 npm test
 
-# 3. Start local development server
-npm run dev
-# Open http://localhost:5173
+# 4. Start the backend server (Port 4000)
+npm run server
 
-# 4. Production build
-npm run build
+# 5. In a second terminal, start the Vite frontend (Port 5173)
+npm run dev
+# Open http://localhost:5173 in your browser
+```
+
+### Dedicated Commands
+
+```powershell
+# Run backend security tests only
+npm run server:test
+
+# Build backend TypeScript
+npm run server:build
+
+# Build frontend and backend together
+npm run build:all
 ```
 
 ---
 
-## 5. Automated Vitest Suite (50 Tests Passing)
+## 6. Automated Test Suite (74 Tests Passing)
 
 ```
+Test Files  4 passed (4)
+Tests       74 passed (74)
+
 ✓ src/lib/__tests__/businessRules.test.ts (8 tests)
 ✓ src/lib/__tests__/phase2Negotiation.test.ts (16 tests)
 ✓ src/lib/__tests__/phase3SecurityGateway.test.ts (26 tests)
-  ✓ 1. Valid seller-accepted FinalDeal passes all IntentLock security checks
-  ✓ 2. Unaccepted seller agreement (isAcceptedBySeller: false) fails verification
-  ✓ 3. Failed negotiation is rejected
-  ✓ 4. Timeout negotiation (5 rounds exceeded) is rejected
-  ✓ 5. Deal exceeding budget ceiling is rejected
-  ✓ 6. Recalculated total mismatch (tampered totalPayable) is rejected immediately
-  ✓ 7. Currency mismatch between user intent and deal is rejected
-  ✓ 8. Refurbished condition violates new-only intent and is rejected
-  ✓ 9. Delivery beyond authorized maximum is rejected
-  ✓ 10. Subscription violation is rejected when user prohibited subscriptions
-  ✓ 11. Missing subscription terms require review when subscription is flagged
-  ✓ 12. Missing warranty declaration requires review (never auto-passes)
-  ✓ 13. Warranty duration below required minimum is rejected
-  ✓ 14. Mandatory charge with missing description is flagged as fee violation
-  ✓ 15. Fingerprint remains stable and deterministic for equivalent canonical objects
-  ✓ 16. Price alteration changes fingerprint
-  ✓ 17. Delivery alteration changes fingerprint
-  ✓ 18. Subscription status alteration changes fingerprint
-  ✓ 19. Warranty alteration changes fingerprint
-  ✓ 20. Unverified deals (Rejected or Needs Review) cannot request user approval
-  ✓ 21. User can explicitly approve a verified deal and receive a payment authorization token
-  ✓ 22. User can explicitly decline a verified deal
-  ✓ 23. Expired approval cannot be consumed or approved
-  ✓ 24. Modifying transaction terms after report generation invalidates approval binding
-  ✓ 25. An authorization token can only be consumed once at checkout (replay prevention)
-  ✓ 26. Failed negotiation cannot produce payment authorization under any circumstances
+✓ server/tests/backendSecurity.test.ts (24 tests)
+    ✓ 1. Rejects deal verification when totalPayable does not match recalculated sum
+    ✓ 2. Rejects deal verification when seller acceptance is false
+    ✓ 3. Rejects deal verification when budget ceiling is exceeded
+    ✓ 4. Rejects deal verification when condition is refurbished for new-only intent
+    ✓ 5. Rejects deal verification when delivery exceeds user limit
+    ✓ 6. Rejects deal verification when subscription is present despite prohibition
+    ✓ 7. Approves deal verification when all hard constraints are satisfied
+    ✓ 8. Returns 404 when verifying a non-existent deal
+    ✓ 9. Generates deterministic SHA-256 fingerprint for valid deal
+    ✓ 10. Computes different fingerprint when deal terms change
+    ✓ 11. Refuses approval creation for rejected deals
+    ✓ 12. Creates approval record with 15-minute expiration for verified deals
+    ✓ 13. Allows explicit human approval and issues single-use authorization token
+    ✓ 14. Rejects human approval if deal terms were modified after verification
+    ✓ 15. Allows human to decline verified deal
+    ✓ 16. Allows single-use authorization token consumption
+    ✓ 17. Rejects token replay on second consumption attempt (replay protection)
+    ✓ 18. Rejects token consumption with invalid authorization token
+    ✓ 19. Rejects token consumption when deal was declined
+    ✓ 20. Rejects token consumption when approval is expired
+    ✓ 21. Enforces data isolation between different user IDs
+    ✓ 22. Persists deal and verification report across database re-initialization
+    ✓ 23. Appends immutable audit records for each lifecycle transition
+    ✓ 24. Validates request payloads with Zod schemas and returns 400 on malformed input
 ```
 
 ---
 
-## 6. Phase 3 Status: Functional vs. Simulated
+## 7. Security Capability Matrix
 
 | Security Capability | Implementation Status | Technical Reality |
 | :--- | :--- | :--- |
-| **Independent Verification Engine** | **Functional** | Evaluates all 9 hard requirements directly on FinalDeal |
-| **Total Recalculation Guard** | **Functional** | Independently calculates productPrice + fees; rejects mathematical inconsistencies |
-| **Bilateral Acceptance Check** | **Functional** | Rejects any unagreed, failed, or timed-out negotiation session |
-| **SHA-256 Contract Fingerprint** | **Functional** | Deterministic canonical serialization hashing security-relevant terms |
-| **Human Approval Gate** | **Functional** | Requires user confirmation; supports approval, decline, and expiration |
-| **Replay & One-Time Token Guard** | **Functional** | Single-use consumption token bound to exact contract fingerprint |
-| **Tamper Invalidation** | **Functional** | Modifying terms post-verification invalidates approval immediately |
-| **Cryptographic Root of Trust** | **Demonstration Model** | In-browser SHA-256 demonstrates integrity logic. Authoritative protection requires a trusted server backend holding cryptographic keys |
-| **PayPal Sandbox Gateway** | **Scheduled** | Reserved for Phase 4 backend integration |
+| **Server-Enforced Policy Engine** | **Functional** | Evaluates all 9 checks on Express backend; client agent cannot approve |
+| **Total Recalculation Guard** | **Functional** | Server independently calculates productPrice + fees; rejects arithmetic mismatches |
+| **Bilateral Acceptance Verification** | **Functional** | Server rejects unagreed or unaccepted sessions |
+| **SHA-256 Contract Fingerprint** | **Functional** | Canonical JSON ordering hashing security terms; changes upon any modification |
+| **Tamper Invalidation Gate** | **Functional** | Approval endpoint re-verifies fingerprint; rejects post-verification modifications |
+| **HMAC-SHA256 Token Authority** | **Functional** | Backend issues cryptographic authorization tokens signed with server secret |
+| **Single-Use Replay Protection** | **Functional** | Atomic SQLite transaction invalidates token upon first consumption |
+| **Persistent SQLite Storage** | **Functional** | Data persists across server restarts in WAL mode with foreign keys |
+| **Audit Trail Immutability** | **Functional** | Append-only SQLite event ledger recording actor, timestamp, and metadata |
+| **Session Isolation** | **Functional** | User identity separation via session headers preventing cross-account access |
+| **PayPal Sandbox Gateway** | **Out of Scope** | Reserved for future payment processor handoff |

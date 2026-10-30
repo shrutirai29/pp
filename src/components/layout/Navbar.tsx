@@ -15,6 +15,7 @@ interface NavbarProps {
   onNavigate: (view: NavView) => void;
   activeDealTitle?: string;
   isDealActive?: boolean;
+  isServerOnline?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -22,6 +23,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onNavigate,
   activeDealTitle,
   isDealActive = true,
+  isServerOnline = false,
 }) => {
   const navItems: { id: NavView; label: string; icon: React.ReactNode; requiresDeal?: boolean }[] = [
     {
@@ -118,9 +120,16 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="text-slate-200 font-medium truncate">{activeDealTitle}</span>
             </div>
           )}
-          <span className="text-[11px] font-mono px-2.5 py-1 rounded bg-navy-900 text-slate-400 border border-navy-800">
-            DEMO MODE
-          </span>
+          {isServerOnline ? (
+            <span className="text-[11px] font-mono px-2.5 py-1 rounded bg-emerald-950/60 text-emerald-400 border border-emerald-800/60 flex items-center gap-1.5 shadow-sm">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              SERVER ENFORCED
+            </span>
+          ) : (
+            <span className="text-[11px] font-mono px-2.5 py-1 rounded bg-navy-900 text-slate-400 border border-navy-800">
+              CLIENT ENGINE
+            </span>
+          )}
         </div>
       </div>
 
