@@ -55,7 +55,7 @@ export type LLMSellerResponse = z.infer<typeof LLMSellerResponseSchema>;
 export const ExecuteNegotiationPayloadSchema = z.object({
   offerId: z.string().min(1),
   sellerId: z.string().optional(),
-  provider: z.enum(['mock', 'openai', 'anthropic', 'gemini']).optional(),
+  provider: z.enum(['mock', 'openai', 'anthropic', 'gemini', 'groq']).optional(),
   productOffer: z
     .object({
       id: z.string(),

@@ -14,13 +14,39 @@ export const EnvSchema = z
     PAYPAL_BASE_URL: z.string().default('https://api-m.sandbox.paypal.com'),
 
     // LLM Provider Configuration
-    LLM_PROVIDER: z.enum(['mock', 'openai', 'anthropic', 'gemini']).default('mock'),
+    LLM_PROVIDER: z.enum(['mock', 'openai', 'anthropic', 'gemini', 'groq']).default('mock'),
     LLM_API_KEY: z.string().default(''),
     LLM_MODEL: z.string().default('mock-model-v1'),
     LLM_BASE_URL: z.string().default(''),
     LLM_TIMEOUT_MS: z.coerce.number().default(15000),
     LLM_MAX_RETRIES: z.coerce.number().default(2),
   })
+  .refine(
+    (data) => {
+      // Must remain Sandbox-only
+      if (data.PAYPAL_ENV !== 'sandbox') {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: 'PayPal must remain Sandbox-only (PAYPAL_ENV=sandbox). Live/production PayPal is prohibited.',
+      path: ['PAYPAL_ENV'],
+    }
+  )
+  .refine(
+    (data) => {
+      // Production PayPal endpoint is strictly prohibited
+      if (data.PAYPAL_BASE_URL.includes('api-m.paypal.com') && !data.PAYPAL_BASE_URL.includes('sandbox')) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: 'Production PayPal endpoint is strictly prohibited. PAYPAL_BASE_URL must target sandbox: https://api-m.sandbox.paypal.com',
+      path: ['PAYPAL_BASE_URL'],
+    }
+  )
   .refine(
     (data) => {
       if (data.NODE_ENV === 'production' && data.TOKEN_HMAC_SECRET === 'dev_insecure_hmac_secret_for_demo_only') {
@@ -43,6 +69,18 @@ export const EnvSchema = z
     {
       message: 'In production mode, LLM_API_KEY must be explicitly set when LLM_PROVIDER is not mock.',
       path: ['LLM_API_KEY'],
+    }
+  )
+  .refine(
+    (data) => {
+      if (data.NODE_ENV === 'production' && (!data.PAYPAL_CLIENT_ID || !data.PAYPAL_CLIENT_SECRET)) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: 'In production mode, PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET must be explicitly set. Mock payment is prohibited.',
+      path: ['PAYPAL_CLIENT_ID'],
     }
   );
 

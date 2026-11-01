@@ -24,6 +24,7 @@ import { NegotiationCoordinator } from '../services/negotiation/negotiationCoord
 import { OfferRankingService } from '../services/negotiation/offerRankingService.js';
 import { getServerSellerPolicy } from '../data/sellerPolicies.js';
 import { EnvConfig } from '../config/env.js';
+import { isPayPalSupportedCurrency, PAYPAL_SUPPORTED_CURRENCIES } from '../config/currencies.js';
 
 export function createApiRouter(
   dealRepo: DealRepository,
@@ -47,6 +48,72 @@ export function createApiRouter(
         clientId: config.PAYPAL_CLIENT_ID || 'sb',
         env: config.PAYPAL_ENV || 'sandbox',
         currency: 'USD',
+      },
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 0.1 GET /api/preflight - Safe Preflight & Environment Verification (Zero Side-Effects)
+  // ---------------------------------------------------------------------------
+  router.get('/preflight', (req: Request, res: Response) => {
+    const isSandboxEnv = config.PAYPAL_ENV === 'sandbox';
+    const isSafeBaseUrl =
+      !config.PAYPAL_BASE_URL.includes('api-m.paypal.com') || config.PAYPAL_BASE_URL.includes('sandbox');
+    const hasPayPalCredentials = Boolean(config.PAYPAL_CLIENT_ID && config.PAYPAL_CLIENT_SECRET);
+    const isLLMExplicit = Boolean(
+      config.LLM_PROVIDER && ['mock', 'openai', 'anthropic', 'gemini', 'groq'].includes(config.LLM_PROVIDER)
+    );
+    const hasLLMKey = Boolean(config.LLM_API_KEY && config.LLM_API_KEY.trim().length > 0);
+
+    let currencyCheck: { currency: string; isSupported: boolean; message: string } | undefined = undefined;
+    const checkCurrency = typeof req.query.currency === 'string' ? req.query.currency : undefined;
+    const checkDealId = typeof req.query.dealId === 'string' ? req.query.dealId : undefined;
+
+    let targetCurrency = checkCurrency;
+    if (checkDealId) {
+      const deal = dealRepo.getDeal(checkDealId);
+      if (deal) {
+        targetCurrency = deal.intent.currency;
+      }
+    }
+
+    if (targetCurrency) {
+      const supported = isPayPalSupportedCurrency(targetCurrency);
+      currencyCheck = {
+        currency: targetCurrency,
+        isSupported: supported,
+        message: supported
+          ? `Currency '${targetCurrency}' is supported by PayPal.`
+          : `Currency '${targetCurrency}' is NOT supported by PayPal. Checkout will be rejected.`,
+      };
+    }
+
+    const checksPassed = isSandboxEnv && isSafeBaseUrl && isLLMExplicit;
+
+    res.json({
+      success: checksPassed,
+      timestamp: new Date().toISOString(),
+      preflight: {
+        environment: config.NODE_ENV,
+        llm: {
+          provider: config.LLM_PROVIDER,
+          model: config.LLM_MODEL,
+          explicit: isLLMExplicit,
+          hasKey: hasLLMKey,
+          mode: config.LLM_PROVIDER === 'mock' || !hasLLMKey ? 'mock_llm' : 'live_llm',
+        },
+        paypal: {
+          env: config.PAYPAL_ENV,
+          baseUrl: config.PAYPAL_BASE_URL,
+          isSandboxOnly: isSandboxEnv && isSafeBaseUrl,
+          hasCredentials: hasPayPalCredentials,
+          liveSandboxReady: hasPayPalCredentials && isSandboxEnv && isSafeBaseUrl,
+        },
+        currencies: {
+          supportedList: PAYPAL_SUPPORTED_CURRENCIES,
+          count: PAYPAL_SUPPORTED_CURRENCIES.length,
+          queryCheck: currencyCheck,
+        },
       },
     });
   });
@@ -715,18 +782,24 @@ export function createApiRouter(
 
       const { offerId, productOffer } = parsed.data;
 
-      // Construct offer terms from payload or server policy
+      // Construct offer terms from payload or server policy (adapting to deal currency scale)
+      const policyForOffer = getServerSellerPolicy(
+        offerId,
+        undefined,
+        deal.intent.currency === 'USD' && deal.intent.maxBudget < 500 ? Math.min(deal.intent.maxBudget, 74) : undefined
+      );
+
       const resolvedOffer = productOffer || {
         id: offerId,
-        sellerName: getServerSellerPolicy(offerId).sellerName,
+        sellerName: policyForOffer.sellerName,
         productTitle: deal.intent.productTitle,
-        basePrice: getServerSellerPolicy(offerId).startingPrice,
-        deliveryFee: getServerSellerPolicy(offerId).deliveryFee,
-        otherCharges: getServerSellerPolicy(offerId).otherCharges,
-        estimatedDeliveryDays: getServerSellerPolicy(offerId).deliveryOptions.standardDays,
-        warrantyMonths: getServerSellerPolicy(offerId).warrantyMonths,
-        hasSubscription: getServerSellerPolicy(offerId).hasSubscription,
-        condition: getServerSellerPolicy(offerId).condition,
+        basePrice: policyForOffer.startingPrice,
+        deliveryFee: policyForOffer.deliveryFee,
+        otherCharges: policyForOffer.otherCharges,
+        estimatedDeliveryDays: policyForOffer.deliveryOptions.standardDays,
+        warrantyMonths: policyForOffer.warrantyMonths,
+        hasSubscription: policyForOffer.hasSubscription,
+        condition: policyForOffer.condition,
         currency: deal.intent.currency,
       };
 

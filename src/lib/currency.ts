@@ -1,7 +1,7 @@
 import { CurrencyCode } from '../types/deal';
 
-export function formatCurrency(amount: number, currency: CurrencyCode = 'INR'): string {
-  const locale = currency === 'INR' ? 'en-IN' : 'en-US';
+export function formatCurrency(amount: number, currency: CurrencyCode = 'USD'): string {
+  const locale = currency === 'USD' ? 'en-US' : currency === 'INR' ? 'en-IN' : 'en-US';
   
   try {
     return new Intl.NumberFormat(locale, {

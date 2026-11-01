@@ -7,6 +7,7 @@ import { PaymentRepository, StoredPayment, PaymentStatus } from '../repositories
 import { PayPalClient } from './paypalClient.js';
 import { generateServerDealFingerprint, hashAuthorizationToken } from './integrityService.js';
 import { EnvConfig } from '../config/env.js';
+import { isPayPalSupportedCurrency, PAYPAL_SUPPORTED_CURRENCIES, isAmountEqual } from '../config/currencies.js';
 
 export class PaymentSecurityError extends Error {
   constructor(public statusCode: number, message: string) {
@@ -68,9 +69,17 @@ export class PaymentService {
       throw new PaymentSecurityError(400, 'Cannot checkout deal: Negotiation status is not agreed or accepted by seller.');
     }
 
-    // Defensive check: currency match
+    // Defensive check: currency match between intent and final deal
     if (deal.finalDeal.currency !== deal.intent.currency) {
       throw new PaymentSecurityError(400, 'Currency mismatch between authorized intent and final deal.');
+    }
+
+    // Defensive check: currency must be on PayPal supported currencies allowlist
+    if (!isPayPalSupportedCurrency(deal.intent.currency)) {
+      throw new PaymentSecurityError(
+        400,
+        `Currency '${deal.intent.currency}' is not supported by PayPal. Checkout requires a supported currency (${PAYPAL_SUPPORTED_CURRENCIES.join(', ')}).`
+      );
     }
 
     // Defensive check: totalPayable mathematical consistency
@@ -78,7 +87,7 @@ export class PaymentService {
       Number(deal.finalDeal.productPrice) +
       Number(deal.finalDeal.deliveryFee || 0) +
       Number(deal.finalDeal.otherCharges || 0);
-    if (Math.abs(calculatedTotal - deal.finalDeal.totalPayable) > 0.001) {
+    if (!isAmountEqual(calculatedTotal, deal.finalDeal.totalPayable, deal.finalDeal.currency)) {
       throw new PaymentSecurityError(
         400,
         'Deal terms are mathematically inconsistent: totalPayable does not match itemized sum.'
@@ -169,23 +178,13 @@ export class PaymentService {
     amount: number;
     currency: string;
     approvalUrl?: string;
+    isSimulated?: boolean;
+    gatewayMode?: 'live_sandbox' | 'mock_sandbox';
   }> {
     // Check if an existing payment is already completed
     const existingPayment = this.paymentRepo.getPaymentByDealId(params.dealId);
-    if (existingPayment) {
-      if (existingPayment.status === 'COMPLETED') {
-        throw new PaymentSecurityError(400, 'Payment for this deal has already been completed.');
-      }
-      // If order already created and active, return existing order (idempotency)
-      if (existingPayment.status === 'ORDER_CREATED' && existingPayment.paypalOrderId) {
-        return {
-          paymentId: existingPayment.id,
-          paypalOrderId: existingPayment.paypalOrderId,
-          status: existingPayment.status,
-          amount: existingPayment.amount,
-          currency: existingPayment.currency,
-        };
-      }
+    if (existingPayment && existingPayment.status === 'COMPLETED') {
+      throw new PaymentSecurityError(400, 'Payment for this deal has already been completed.');
     }
 
     const { deal, finalDeal, approval } = this.validateDealForCheckout(
@@ -193,6 +192,25 @@ export class PaymentService {
       params.userId,
       params.authorizationToken
     );
+
+    const isMock = Boolean(this.paypalClient.isMock);
+    const gatewayMode = this.paypalClient.gatewayMode || (isMock ? 'mock_sandbox' : 'live_sandbox');
+
+    // If order already created and active, return existing order (idempotency)
+    if (existingPayment && existingPayment.status === 'ORDER_CREATED' && existingPayment.paypalOrderId) {
+      if (existingPayment.currency !== deal.intent.currency) {
+        throw new PaymentSecurityError(400, 'Currency inconsistency detected between existing payment and current deal terms.');
+      }
+      return {
+        paymentId: existingPayment.id,
+        paypalOrderId: existingPayment.paypalOrderId,
+        status: existingPayment.status,
+        amount: existingPayment.amount,
+        currency: existingPayment.currency,
+        isSimulated: isMock,
+        gatewayMode,
+      };
+    }
 
     // Authoritative amount and currency from server deal terms ONLY
     const authoritativeAmount = finalDeal.totalPayable;
@@ -226,14 +244,18 @@ export class PaymentService {
     this.auditRepo.recordEvent(
       deal.id,
       'paypal_order_created',
-      'PayPal Sandbox Order Created',
-      `Created PayPal Sandbox order ${orderResult.id} for ${authoritativeCurrency} ${authoritativeAmount}. Bound to approved contract fingerprint.`,
+      isMock ? '[SIMULATED MOCK] PayPal Order Created' : 'PayPal Sandbox Order Created',
+      isMock
+        ? `[SIMULATED] Created mock PayPal order ${orderResult.id} for ${authoritativeCurrency} ${authoritativeAmount}. Bound to approved contract fingerprint.`
+        : `Created PayPal Sandbox order ${orderResult.id} for ${authoritativeCurrency} ${authoritativeAmount}. Bound to approved contract fingerprint.`,
       'paypal_gateway',
       {
         paymentId: payment.id,
         paypalOrderId: orderResult.id,
         amount: authoritativeAmount,
         currency: authoritativeCurrency,
+        isSimulated: isMock,
+        gatewayMode,
       }
     );
 
@@ -244,6 +266,8 @@ export class PaymentService {
       amount: authoritativeAmount,
       currency: authoritativeCurrency,
       approvalUrl: approvalLink,
+      isSimulated: isMock,
+      gatewayMode,
     };
   }
 
@@ -266,13 +290,9 @@ export class PaymentService {
     currency: string;
     payerEmail?: string;
     message: string;
+    isSimulated?: boolean;
+    gatewayMode?: 'live_sandbox' | 'mock_sandbox';
   }> {
-    const deal = this.dealRepo.getDeal(params.dealId);
-    if (!deal) throw new PaymentSecurityError(404, 'Deal not found.');
-    if (deal.userId !== params.userId) {
-      throw new PaymentSecurityError(403, "Unauthorized: Deal belongs to another user.");
-    }
-
     const payment = this.paymentRepo.getPaymentByOrderId(params.paypalOrderId);
     if (!payment) {
       throw new PaymentSecurityError(404, 'Payment record for this PayPal order does not exist.');
@@ -281,6 +301,9 @@ export class PaymentService {
     if (payment.dealId !== params.dealId || payment.userId !== params.userId) {
       throw new PaymentSecurityError(403, 'Order does not match specified deal or user.');
     }
+
+    const isMock = Boolean(this.paypalClient.isMock);
+    const gatewayMode = this.paypalClient.gatewayMode || (isMock ? 'mock_sandbox' : 'live_sandbox');
 
     // Idempotency: If already completed, return existing completed record
     if (payment.status === 'COMPLETED') {
@@ -294,21 +317,37 @@ export class PaymentService {
         currency: payment.currency,
         payerEmail: payment.payerEmail || undefined,
         message: 'Payment was already captured and completed.',
+        isSimulated: isMock,
+        gatewayMode,
       };
     }
 
-    // Check approval state and expiration before capturing
-    const approval = this.approvalRepo.getApprovalById(payment.approvalId);
-    if (!approval || approval.status !== 'APPROVED') {
+    // Check approval state on payment record prior to full re-validation
+    const approvalRecord = this.approvalRepo.getApprovalById(payment.approvalId);
+    if (!approvalRecord || approvalRecord.status !== 'APPROVED') {
       throw new PaymentSecurityError(
         400,
-        `Cannot capture order: Approval status is ${approval?.status || 'MISSING'}.`
+        `Cannot capture order: Approval status is ${approvalRecord?.status || 'MISSING'}.`
       );
     }
 
-    if (new Date() > new Date(approval.expiresAt)) {
-      this.approvalRepo.updateToExpired(approval.id);
-      throw new PaymentSecurityError(400, 'Authorization expired prior to capture.');
+    // 1. Authoritative deal and approval re-verification before capture
+    const validation = this.validateDealForCheckout(params.dealId, params.userId);
+    const { deal, finalDeal, approval } = validation;
+
+    if (payment.approvalId !== approval.id) {
+      throw new PaymentSecurityError(400, 'Payment was initiated under a different or outdated approval record.');
+    }
+
+    // Defensive check: payment amount and currency must match authoritative approved deal terms
+    if (
+      payment.currency !== finalDeal.currency ||
+      !isAmountEqual(payment.amount, finalDeal.totalPayable, finalDeal.currency)
+    ) {
+      throw new PaymentSecurityError(
+        400,
+        `Payment record mismatch: expected ${finalDeal.currency} ${finalDeal.totalPayable}, but payment record has ${payment.currency} ${payment.amount}.`
+      );
     }
 
     // If payment status was REQUIRES_RECONCILIATION, probe PayPal first
@@ -316,6 +355,19 @@ export class PaymentService {
       try {
         const probe = await this.paypalClient.getOrder(params.paypalOrderId);
         if (probe.status === 'COMPLETED') {
+          // Validate currency and amount against verified deal terms
+          if (probe.currency && probe.currency.toUpperCase() !== finalDeal.currency.toUpperCase()) {
+            throw new PaymentSecurityError(
+              400,
+              `Reconciliation security failure: PayPal order currency '${probe.currency}' does not match verified deal currency '${finalDeal.currency}'.`
+            );
+          }
+          if (probe.amount !== undefined && !isAmountEqual(probe.amount, finalDeal.totalPayable, finalDeal.currency)) {
+            throw new PaymentSecurityError(
+              400,
+              `Reconciliation security failure: PayPal order amount '${probe.amount}' does not match verified deal amount '${finalDeal.totalPayable}'.`
+            );
+          }
           this.approvalRepo.atomicConsumeApproval(approval.id);
           this.paymentRepo.updateStatus(payment.id, 'COMPLETED', {
             captureId: probe.captureId,
@@ -326,10 +378,17 @@ export class PaymentService {
           this.auditRepo.recordEvent(
             deal.id,
             'paypal_payment_completed',
-            'PayPal Sandbox Payment Reconciled & Confirmed',
-            `Reconciliation confirmed completed capture with PayPal. Capture ID: ${probe.captureId}.`,
+            isMock ? '[SIMULATED MOCK] PayPal Payment Reconciled' : 'PayPal Sandbox Payment Reconciled & Confirmed',
+            isMock
+              ? `[SIMULATED] Reconciliation confirmed completed mock capture. Capture ID: ${probe.captureId}.`
+              : `Reconciliation confirmed completed capture with PayPal Sandbox. Capture ID: ${probe.captureId}.`,
             'paypal_gateway',
-            { paypalOrderId: params.paypalOrderId, captureId: probe.captureId }
+            {
+              paypalOrderId: params.paypalOrderId,
+              captureId: probe.captureId,
+              isSimulated: isMock,
+              gatewayMode,
+            }
           );
           return {
             success: true,
@@ -340,10 +399,15 @@ export class PaymentService {
             amount: payment.amount,
             currency: payment.currency,
             payerEmail: probe.payerEmail,
-            message: 'PayPal Sandbox payment confirmed via reconciliation.',
+            message: isMock
+              ? 'Simulated mock payment confirmed via reconciliation.'
+              : 'PayPal Sandbox payment confirmed via reconciliation.',
+            isSimulated: isMock,
+            gatewayMode,
           };
         }
-      } catch {
+      } catch (err: unknown) {
+        if (err instanceof PaymentSecurityError) throw err;
         throw new PaymentSecurityError(
           502,
           'Network interruption: Unable to reconcile order status with PayPal. Please retry.'
@@ -387,6 +451,18 @@ export class PaymentService {
       try {
         const orderProbe = await this.paypalClient.getOrder(params.paypalOrderId);
         if (orderProbe.status === 'COMPLETED') {
+          if (orderProbe.currency && orderProbe.currency.toUpperCase() !== finalDeal.currency.toUpperCase()) {
+            throw new PaymentSecurityError(
+              400,
+              `Reconciliation security failure: PayPal order currency '${orderProbe.currency}' does not match verified deal currency '${finalDeal.currency}'.`
+            );
+          }
+          if (orderProbe.amount !== undefined && !isAmountEqual(orderProbe.amount, finalDeal.totalPayable, finalDeal.currency)) {
+            throw new PaymentSecurityError(
+              400,
+              `Reconciliation security failure: PayPal order amount '${orderProbe.amount}' does not match verified deal amount '${finalDeal.totalPayable}'.`
+            );
+          }
           captureResult = orderProbe;
         } else {
           throw new PaymentSecurityError(
@@ -394,7 +470,8 @@ export class PaymentService {
             `Network error communicating with PayPal. Order status is ${orderProbe.status}. Please retry reconciliation.`
           );
         }
-      } catch {
+      } catch (err: unknown) {
+        if (err instanceof PaymentSecurityError) throw err;
         throw new PaymentSecurityError(
           502,
           'Payment network interruption. Reconciliation required before retrying capture.'
@@ -403,6 +480,52 @@ export class PaymentService {
     }
 
     if (captureResult.status === 'COMPLETED') {
+      // Validate currency and amount returned from PayPal capture against verified finalDeal
+      const currencyMismatch =
+        captureResult.currency &&
+        captureResult.currency.toUpperCase() !== finalDeal.currency.toUpperCase();
+      const amountMismatch =
+        captureResult.amount !== undefined &&
+        !isAmountEqual(captureResult.amount, finalDeal.totalPayable, finalDeal.currency);
+
+      if (currencyMismatch || amountMismatch) {
+        // PayPal captured funds, but post-capture validation detected a discrepancy!
+        // Transition payment to REQUIRES_RECONCILIATION with captureId to prevent orphaning funds.
+        const discrepancy = currencyMismatch
+          ? `PayPal captured currency '${captureResult.currency}' does not match verified deal currency '${finalDeal.currency}'.`
+          : `PayPal captured amount '${captureResult.amount}' does not match verified deal amount '${finalDeal.totalPayable}'.`;
+
+        this.paymentRepo.updateStatus(payment.id, 'REQUIRES_RECONCILIATION', {
+          captureId: captureResult.captureId,
+          payerEmail: captureResult.payerEmail,
+          payerId: captureResult.payerId,
+          errorMessage: `Post-capture validation discrepancy: ${discrepancy}`,
+        });
+
+        this.auditRepo.recordEvent(
+          deal.id,
+          'payment_reconciliation_needed',
+          'Payment Captured with Terms Discrepancy — Investigation Required',
+          `PayPal successfully captured funds (Capture ID: ${captureResult.captureId}), but terms mismatch was detected: ${discrepancy} Payment held in reconciliation.`,
+          'paypal_gateway',
+          {
+            paypalOrderId: params.paypalOrderId,
+            captureId: captureResult.captureId,
+            expectedAmount: finalDeal.totalPayable,
+            expectedCurrency: finalDeal.currency,
+            capturedAmount: captureResult.amount,
+            capturedCurrency: captureResult.currency,
+            isSimulated: isMock,
+            gatewayMode,
+          }
+        );
+
+        throw new PaymentSecurityError(
+          400,
+          `Capture security failure: ${discrepancy} Order captured with ID ${captureResult.captureId} and held in reconciliation for investigation.`
+        );
+      }
+
       // 1. Consume authorization token atomically in SQLite
       this.approvalRepo.atomicConsumeApproval(approval.id);
 
@@ -420,8 +543,10 @@ export class PaymentService {
       this.auditRepo.recordEvent(
         deal.id,
         'paypal_payment_completed',
-        'PayPal Sandbox Payment Captured Successfully',
-        `Successfully captured funds (${payment.currency} ${payment.amount}) via PayPal. Capture ID: ${captureResult.captureId}. Single-use authorization consumed.`,
+        isMock ? '[SIMULATED MOCK] PayPal Payment Captured' : 'PayPal Sandbox Payment Captured Successfully',
+        isMock
+          ? `[SIMULATED] Successfully captured funds (${payment.currency} ${payment.amount}) via mock client. Capture ID: ${captureResult.captureId}. Single-use authorization consumed.`
+          : `Successfully captured funds (${payment.currency} ${payment.amount}) via PayPal Sandbox. Capture ID: ${captureResult.captureId}. Single-use authorization consumed.`,
         'paypal_gateway',
         {
           paypalOrderId: params.paypalOrderId,
@@ -429,6 +554,8 @@ export class PaymentService {
           amount: payment.amount,
           currency: payment.currency,
           payerEmail: captureResult.payerEmail,
+          isSimulated: isMock,
+          gatewayMode,
         }
       );
 
@@ -441,7 +568,11 @@ export class PaymentService {
         amount: payment.amount,
         currency: payment.currency,
         payerEmail: captureResult.payerEmail,
-        message: 'PayPal Sandbox payment completed successfully.',
+        message: isMock
+          ? 'Simulated mock payment completed successfully.'
+          : 'PayPal Sandbox payment completed successfully.',
+        isSimulated: isMock,
+        gatewayMode,
       };
     } else {
       this.paymentRepo.updateStatus(payment.id, 'FAILED', {
@@ -451,10 +582,10 @@ export class PaymentService {
       this.auditRepo.recordEvent(
         deal.id,
         'paypal_payment_failed',
-        'PayPal Sandbox Payment Failed',
+        isMock ? '[SIMULATED MOCK] PayPal Payment Failed' : 'PayPal Sandbox Payment Failed',
         `PayPal capture returned non-completed status: ${captureResult.status}`,
         'paypal_gateway',
-        { status: captureResult.status }
+        { status: captureResult.status, isSimulated: isMock, gatewayMode }
       );
 
       throw new PaymentSecurityError(

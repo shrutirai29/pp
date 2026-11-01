@@ -8,11 +8,15 @@ import { UserIntent, FinalDeal } from '../src/schemas/dealSchemas.js';
 import { PayPalClient, PayPalOrderParams, HttpPayPalClient } from '../src/services/paypalClient.js';
 
 class MockPayPalClient implements PayPalClient {
+  public isMock = true;
+  public gatewayMode = 'mock_sandbox' as const;
   public orders = new Map<string, any>();
   public shouldFailNetwork = false;
   public simulateFailureStatus: string | null = null;
   public lastCreatedOrderParams: PayPalOrderParams | null = null;
   public captureReconciled = false;
+  public overrideCaptureAmount?: number;
+  public overrideCaptureCurrency?: string;
 
   async createOrder(params: PayPalOrderParams) {
     this.lastCreatedOrderParams = params;
@@ -42,6 +46,8 @@ class MockPayPalClient implements PayPalClient {
       id: orderId,
       status: 'COMPLETED',
       captureId,
+      amount: this.overrideCaptureAmount !== undefined ? this.overrideCaptureAmount : order.amount,
+      currency: this.overrideCaptureCurrency !== undefined ? this.overrideCaptureCurrency : order.currency,
       payerEmail: 'sandbox-buyer@dealmind.example.com',
       payerId: 'PAYER-TEST-9988',
     };
@@ -54,6 +60,8 @@ class MockPayPalClient implements PayPalClient {
       id: orderId,
       status: this.captureReconciled ? 'COMPLETED' : order.status,
       captureId: order.captureId || 'CAP-RECONCILED-123',
+      amount: order.amount,
+      currency: order.currency,
       payerEmail: 'sandbox-buyer@dealmind.example.com',
       payerId: 'PAYER-TEST-9988',
     };
@@ -71,14 +79,20 @@ const testConfig: EnvConfig = {
   PAYPAL_CLIENT_SECRET: 'super_secret_sandbox_key_shhh',
   PAYPAL_ENV: 'sandbox',
   PAYPAL_BASE_URL: 'https://api-m.sandbox.paypal.com',
+  LLM_PROVIDER: 'mock',
+  LLM_API_KEY: '',
+  LLM_MODEL: 'mock-model-v1',
+  LLM_BASE_URL: '',
+  LLM_TIMEOUT_MS: 5000,
+  LLM_MAX_RETRIES: 1,
 };
 
 const mockIntent: UserIntent = {
   id: 'deal-pp-001',
-  rawQuery: 'Samsung 980 1TB SSD under ₹8,000, new condition, delivery in 3 days, no subscriptions.',
+  rawQuery: 'Samsung 980 1TB SSD under $85, new condition, delivery in 3 days, no subscriptions.',
   productTitle: 'Samsung 980 1TB NVMe SSD',
-  maxBudget: 8000,
-  currency: 'INR',
+  maxBudget: 85,
+  currency: 'USD',
   requiredCondition: 'new',
   maxDeliveryDays: 3,
   requiredWarrantyMonths: 12,
@@ -96,10 +110,10 @@ const mockValidFinalDeal: FinalDeal = {
   sellerName: 'PrimeTech Retail',
   productTitle: 'Samsung 980 1TB NVMe SSD',
   condition: 'new',
-  productPrice: 7499,
+  productPrice: 75,
   deliveryFee: 0,
   otherCharges: 0,
-  totalPayable: 7499,
+  totalPayable: 75,
   deliveryEstimateDays: 2,
   warrantyMonths: 12,
   hasSubscription: false,
@@ -107,8 +121,8 @@ const mockValidFinalDeal: FinalDeal = {
   roundCount: 2,
   messages: [],
   isAcceptedBySeller: true,
-  currency: 'INR',
-  totalSaved: 500,
+  currency: 'USD',
+  totalSaved: 10,
   stopReason: 'agreed',
 };
 
@@ -262,8 +276,8 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
     // Attacker modifies price in the database
     const tamperedDeal: FinalDeal = {
       ...mockValidFinalDeal,
-      totalPayable: 7999, // modified price
-      productPrice: 7999,
+      totalPayable: 80, // modified price under budget
+      productPrice: 80,
     };
 
     db.prepare(`
@@ -680,8 +694,8 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
     // Mutate the price of the deal
     const priceChangedDeal: FinalDeal = {
       ...mockValidFinalDeal,
-      totalPayable: 6999, // price concession after approval
-      productPrice: 6999,
+      totalPayable: 70, // price concession after approval
+      productPrice: 70,
     };
 
     db.prepare('UPDATE deals SET final_deal_json = ? WHERE id = ?').run(
@@ -836,5 +850,229 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
     });
 
     expect(result.success).toBe(false);
+  });
+
+  // 30. Rejects checkout if deal currency is unsupported by PayPal (e.g., INR) and creates zero orders
+  it('30. Rejects checkout if deal currency is unsupported by PayPal allowlist', async () => {
+    const inrIntent: UserIntent = { ...mockIntent, id: 'deal-inr-fail', currency: 'INR', maxBudget: 8000 };
+    const inrDeal: FinalDeal = { ...mockValidFinalDeal, dealId: 'deal-inr-fail', currency: 'INR', totalPayable: 7500, productPrice: 7500 };
+
+    await request(app).post('/api/deals').set('x-user-id', 'u1').send({ intent: inrIntent, finalDeal: inrDeal });
+    await request(app).post(`/api/deals/${inrIntent.id}/verify`).set('x-user-id', 'u1').expect(200);
+    await request(app).post(`/api/deals/${inrIntent.id}/approval-request`).set('x-user-id', 'u1').expect(201);
+
+    const appRes = await request(app).post(`/api/deals/${inrIntent.id}/approve`).set('x-user-id', 'u1').expect(200);
+    const authToken = appRes.body.data.authorizationToken;
+
+    const initialOrderCount = mockPayPal.orders.size;
+
+    const res = await request(app)
+      .post(`/api/deals/${inrIntent.id}/checkout`)
+      .set('x-user-id', 'u1')
+      .send({ authorizationToken: authToken })
+      .expect(400);
+
+    expect(res.body.success).toBe(false);
+    expect(res.body.error).toMatch(/Currency 'INR' is not supported by PayPal/i);
+
+    // Verify PayPal client was NEVER invoked and zero orders created
+    expect(mockPayPal.orders.size).toBe(initialOrderCount);
+  });
+
+  // 31. HttpPayPalClient throws on unsupported currency without silent USD substitution
+  it('31. HttpPayPalClient rejects unsupported currency without silent fallback to USD', async () => {
+    const client = new HttpPayPalClient('fake_client_id', 'fake_secret', 'https://api-m.sandbox.paypal.com');
+
+    await expect(
+      client.createOrder({
+        dealId: 'd-test',
+        referenceId: 'ref-test',
+        description: 'Test order',
+        amount: 5000,
+        currency: 'INR',
+      })
+    ).rejects.toThrow(/PayPal currency safety error: 'INR' is not supported by PayPal REST API/i);
+  });
+
+  // 32. Reconciliation rejects when PayPal returns a mismatched currency or amount
+  it('32. Reconciliation strictly rejects when PayPal reports mismatched currency or amount', async () => {
+    const setup = await setupApprovedDeal();
+    const checkoutRes = await request(app)
+      .post(`/api/deals/${setup.dealId}/checkout`)
+      .set('x-user-id', setup.userId)
+      .send({ authorizationToken: setup.authorizationToken })
+      .expect(201);
+
+    const orderId = checkoutRes.body.data.paypalOrderId;
+
+    // Put payment in REQUIRES_RECONCILIATION
+    db.prepare(`UPDATE payments SET status = 'REQUIRES_RECONCILIATION' WHERE paypal_order_id = ?`).run(orderId);
+
+    // Corrupt currency in PayPal mock to EUR while deal is USD
+    mockPayPal.orders.set(orderId, {
+      ...mockPayPal.orders.get(orderId),
+      status: 'COMPLETED',
+      currency: 'EUR',
+      amount: 75,
+    });
+    mockPayPal.captureReconciled = true;
+
+    const res = await request(app)
+      .post(`/api/deals/${setup.dealId}/capture`)
+      .set('x-user-id', setup.userId)
+      .send({ paypalOrderId: orderId })
+      .expect(400);
+
+    expect(res.body.success).toBe(false);
+    expect(res.body.error).toMatch(/Reconciliation security failure: PayPal order currency 'EUR' does not match/i);
+  });
+
+  // 33. Prohibits production PayPal endpoints in demo configuration and HttpPayPalClient
+  it('33. Prohibits production PayPal base URL at configuration and client initialization', () => {
+    // EnvSchema rejects live PayPal endpoint
+    const envRes = EnvSchema.safeParse({
+      PAYPAL_BASE_URL: 'https://api-m.paypal.com',
+    });
+    expect(envRes.success).toBe(false);
+
+    // HttpPayPalClient rejects live PayPal endpoint
+    expect(
+      () => new HttpPayPalClient('client_id', 'client_secret', 'https://api-m.paypal.com')
+    ).toThrow(/Production PayPal base URL is strictly prohibited/i);
+  });
+
+  // 34. capturePayment rejects if deal is tampered post-checkout initiation
+  it('34. capturePayment strictly rejects if deal terms are tampered after checkout initiation', async () => {
+    const setup = await setupApprovedDeal();
+    const checkoutRes = await request(app)
+      .post(`/api/deals/${setup.dealId}/checkout`)
+      .set('x-user-id', setup.userId)
+      .send({ authorizationToken: setup.authorizationToken })
+      .expect(201);
+
+    const orderId = checkoutRes.body.data.paypalOrderId;
+
+    // Tamper with the deal productPrice directly in the database
+    const tamperedFinalDeal = {
+      ...mockValidFinalDeal,
+      productPrice: 999,
+      totalPayable: 999,
+    };
+    db.prepare(`UPDATE deals SET final_deal_json = ? WHERE id = ?`).run(
+      JSON.stringify(tamperedFinalDeal),
+      setup.dealId
+    );
+
+    const captureRes = await request(app)
+      .post(`/api/deals/${setup.dealId}/capture`)
+      .set('x-user-id', setup.userId)
+      .send({ paypalOrderId: orderId })
+      .expect(400);
+
+    expect(captureRes.body.success).toBe(false);
+    expect(captureRes.body.error).toMatch(
+      /exceeds authorized user budget ceiling|modified after verification|altered after approval|Payment record mismatch/i
+    );
+  });
+
+  // 35. capturePayment rejects if PayPal returns an amount or currency differing from approved deal
+  it('35. capturePayment rejects if PayPal capture returns mismatched currency or amount', async () => {
+    const setup = await setupApprovedDeal();
+    const checkoutRes = await request(app)
+      .post(`/api/deals/${setup.dealId}/checkout`)
+      .set('x-user-id', setup.userId)
+      .send({ authorizationToken: setup.authorizationToken })
+      .expect(201);
+
+    const orderId = checkoutRes.body.data.paypalOrderId;
+
+    // Override mock capture to return EUR instead of USD
+    mockPayPal.overrideCaptureCurrency = 'EUR';
+
+    const captureRes = await request(app)
+      .post(`/api/deals/${setup.dealId}/capture`)
+      .set('x-user-id', setup.userId)
+      .send({ paypalOrderId: orderId })
+      .expect(400);
+
+    expect(captureRes.body.success).toBe(false);
+    expect(captureRes.body.error).toMatch(/Capture security failure: PayPal captured currency 'EUR'/i);
+
+    // Verify payment record entered REQUIRES_RECONCILIATION and preserved the capture ID (never orphaned)
+    const paymentInDb = db.prepare('SELECT * FROM payments WHERE paypal_order_id = ?').get(orderId) as any;
+    expect(paymentInDb.status).toBe('REQUIRES_RECONCILIATION');
+    expect(paymentInDb.paypal_capture_id).toBeDefined();
+    expect(paymentInDb.paypal_capture_id).toMatch(/^CAP-/);
+
+    // Verify deal was NOT marked completed
+    const dealInDb = db.prepare('SELECT * FROM deals WHERE id = ?').get(setup.dealId) as any;
+    expect(dealInDb.status).not.toBe('payment_completed');
+
+    // Reset override
+    mockPayPal.overrideCaptureCurrency = undefined;
+  });
+
+  // 35b. Minor unit precision enforces exact match without arbitrary tolerance drift
+  it('35b. Precision comparison rejects 1-cent drift and respects zero-decimal minor units', async () => {
+    const { isAmountEqual } = await import('../src/config/currencies.js');
+
+    // USD (2 decimal places)
+    expect(isAmountEqual(68.00, 68.00, 'USD')).toBe(true);
+    expect(isAmountEqual(68.00, 68.01, 'USD')).toBe(false); // 1 cent difference rejected!
+    expect(isAmountEqual(68.00, 67.99, 'USD')).toBe(false);
+
+    // JPY (0 decimal places)
+    expect(isAmountEqual(5000, 5000, 'JPY')).toBe(true);
+    expect(isAmountEqual(5000, 5001, 'JPY')).toBe(false); // 1 yen difference rejected!
+  });
+
+  // 36. Checkout and capture identify mock mode and label simulation in response and audit trail
+  it('36. Mock checkout and capture explicitly flag simulation mode in payload and audit trail', async () => {
+    const setup = await setupApprovedDeal();
+    const checkoutRes = await request(app)
+      .post(`/api/deals/${setup.dealId}/checkout`)
+      .set('x-user-id', setup.userId)
+      .send({ authorizationToken: setup.authorizationToken })
+      .expect(201);
+
+    expect(checkoutRes.body.data.isSimulated).toBe(true);
+    expect(checkoutRes.body.data.gatewayMode).toBe('mock_sandbox');
+
+    const captureRes = await request(app)
+      .post(`/api/deals/${setup.dealId}/capture`)
+      .set('x-user-id', setup.userId)
+      .send({ paypalOrderId: checkoutRes.body.data.paypalOrderId })
+      .expect(200);
+
+    expect(captureRes.body.data.isSimulated).toBe(true);
+    expect(captureRes.body.data.gatewayMode).toBe('mock_sandbox');
+
+    // Verify audit logs contain simulated mock labels
+    const auditRes = await request(app)
+      .get(`/api/deals/${setup.dealId}/audit`)
+      .set('x-user-id', setup.userId)
+      .expect(200);
+
+    const orderEvent = auditRes.body.data.find((e: any) => e.type === 'paypal_order_created');
+    expect(orderEvent).toBeDefined();
+    expect(orderEvent.title).toContain('[SIMULATED MOCK]');
+
+    const captureEvent = auditRes.body.data.find((e: any) => e.type === 'paypal_payment_completed');
+    expect(captureEvent).toBeDefined();
+    expect(captureEvent.title).toContain('[SIMULATED MOCK]');
+  });
+
+  // 37. Production mode strictly rejects mock client fallback when credentials are empty
+  it('37. Production mode strictly rejects mock PayPal client when credentials are not configured', () => {
+    const prodConfig: EnvConfig = {
+      ...testConfig,
+      NODE_ENV: 'production',
+      PAYPAL_CLIENT_ID: '',
+      PAYPAL_CLIENT_SECRET: '',
+    };
+
+    expect(() => createApp(db, prodConfig)).toThrow(
+      /Production configuration error: PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET are required in production/i
+    );
   });
 });

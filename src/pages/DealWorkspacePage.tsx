@@ -109,21 +109,21 @@ export const DealWorkspacePage: React.FC<DealWorkspacePageProps> = ({
           <div className="rounded-lg bg-navy-900/50 p-3 border border-navy-850">
             <span className="text-emerald-400 font-semibold block mb-1">1. TechHaven Direct (Compliant)</span>
             <p className="text-[11px] leading-relaxed text-slate-300">
-              Factory new condition, ₹7,299 total (under ₹8k budget), 2-day delivery, 60-mo warranty, and zero subscriptions. Eligible for immediate autonomous negotiation.
+              Factory new condition, $74 total (under $85 budget), 2-day delivery, 60-mo warranty, and zero subscriptions. Eligible for immediate autonomous negotiation.
             </p>
           </div>
 
           <div className="rounded-lg bg-navy-900/50 p-3 border border-navy-850">
             <span className="text-rose-400 font-semibold block mb-1">2. SpeedyStorage (Cheaper Trap)</span>
             <p className="text-[11px] leading-relaxed text-slate-300">
-              Listed at ₹5,999 base price to appear enticing, but bundles a hidden ₹299/mo subscription, 5-day delivery, and refurbished condition. Disqualified automatically.
+              Listed at $59 base price to appear enticing, but bundles a hidden $4.99/mo subscription, 5-day delivery, and refurbished condition. Disqualified automatically.
             </p>
           </div>
 
           <div className="rounded-lg bg-navy-900/50 p-3 border border-navy-850">
             <span className="text-amber-400 font-semibold block mb-1">3. Apex Silicon (Over-Budget Flagship)</span>
             <p className="text-[11px] leading-relaxed text-slate-300">
-              Factory new high-end SSD with heatsink, but ₹8,649 total price breaches the buyer's maximum ceiling of ₹8,000. Locked out from negotiation.
+              Factory new high-end SSD with heatsink, but $103 total price breaches the buyer's maximum ceiling of $85. Locked out from negotiation.
             </p>
           </div>
         </div>

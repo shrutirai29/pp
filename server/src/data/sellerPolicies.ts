@@ -125,11 +125,22 @@ export function getServerSellerPolicy(
   basePrice?: number
 ): ServerSellerPolicy {
   if (SERVER_SELLER_POLICIES[offerId]) {
-    return SERVER_SELLER_POLICIES[offerId];
+    const policy = SERVER_SELLER_POLICIES[offerId];
+    // If basePrice is supplied and indicates a USD-scale offer (< 500), adapt dynamically to the offer scale:
+    if (basePrice !== undefined && basePrice < 500 && policy.startingPrice > 1000) {
+      const discount = policy.maxPermittedDiscount;
+      return {
+        ...policy,
+        startingPrice: basePrice,
+        privateMinimumAcceptablePrice: Math.round(basePrice * (1 - discount)),
+        deliveryFee: policy.deliveryFee > 0 ? Math.min(policy.deliveryFee, 10) : 0,
+      };
+    }
+    return policy;
   }
 
   // Fallback policy generated deterministically from listing price
-  const price = basePrice || 7000;
+  const price = basePrice || 80;
   return {
     sellerId: offerId,
     sellerName: sellerName || 'Simulated Merchant',
@@ -138,7 +149,7 @@ export function getServerSellerPolicy(
     privateMinimumAcceptablePrice: Math.round(price * 0.92),
     maxPermittedDiscount: 0.08,
     deliveryOptions: { standardDays: 3 },
-    deliveryFee: 100,
+    deliveryFee: price > 1000 ? 100 : 5,
     otherCharges: 0,
     condition: 'new',
     warrantyMonths: 24,

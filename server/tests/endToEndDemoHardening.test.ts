@@ -41,6 +41,8 @@ class MockPayPalGateway implements PayPalClient {
       id: orderId,
       status: 'COMPLETED',
       captureId,
+      amount: order.amount,
+      currency: order.currency,
       payerEmail: 'sandbox-buyer@dealmind.example.com',
       payerId: 'PAYER-TEST-1234',
     };
@@ -53,6 +55,8 @@ class MockPayPalGateway implements PayPalClient {
       id: orderId,
       status: this.captureReconciled ? 'COMPLETED' : order.status,
       captureId: order.captureId || 'CAP-RECONCILED-999',
+      amount: order.amount,
+      currency: order.currency,
       payerEmail: 'sandbox-buyer@dealmind.example.com',
       payerId: 'PAYER-TEST-1234',
     };
@@ -80,10 +84,10 @@ const testConfig: EnvConfig = {
 
 const mockIntent: UserIntent = {
   id: 'deal-e2e-001',
-  rawQuery: 'Samsung 980 1TB SSD under ₹7,500, new condition, delivery in 3 days, no subscriptions.',
+  rawQuery: 'Samsung 980 1TB SSD under $85, new condition, delivery in 3 days, no subscriptions.',
   productTitle: 'Samsung 980 1TB NVMe SSD',
-  maxBudget: 7500,
-  currency: 'INR',
+  maxBudget: 85,
+  currency: 'USD',
   requiredCondition: 'new',
   maxDeliveryDays: 3,
   requiredWarrantyMonths: 12,
@@ -129,28 +133,28 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
         id: 'off-techhaven-01',
         sellerName: 'TechHaven Direct',
         productTitle: 'Samsung 980 1TB NVMe SSD',
-        basePrice: 7299,
+        basePrice: 74,
         deliveryFee: 0,
         otherCharges: 0,
         estimatedDeliveryDays: 2,
         warrantyMonths: 60,
         hasSubscription: false,
         condition: 'new',
-        currency: 'INR',
+        currency: 'USD',
         sellerReliabilityScore: 98,
       },
       {
         id: 'off-conditional-prime',
         sellerName: 'Prime Storage Solutions',
         productTitle: 'Samsung 980 1TB NVMe SSD',
-        basePrice: 7600,
-        deliveryFee: 200,
+        basePrice: 78,
+        deliveryFee: 5,
         otherCharges: 0,
         estimatedDeliveryDays: 3,
         warrantyMonths: 24,
         hasSubscription: false,
         condition: 'new',
-        currency: 'INR',
+        currency: 'USD',
         sellerReliabilityScore: 94,
       },
     ];
@@ -289,10 +293,10 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
       sellerName: 'Expensive Vendor',
       productTitle: mockIntent.productTitle,
       condition: 'new' as const,
-      productPrice: 9000, // Budget is 7500
+      productPrice: 95, // Budget is 85
       deliveryFee: 0,
       otherCharges: 0,
-      totalPayable: 9000,
+      totalPayable: 95,
       deliveryEstimateDays: 2,
       warrantyMonths: 24,
       hasSubscription: false,
@@ -300,7 +304,7 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
       roundCount: 2,
       messages: [],
       isAcceptedBySeller: true,
-      currency: 'INR' as const,
+      currency: 'USD' as const,
       totalSaved: 0,
       stopReason: 'agreed' as const,
     };
@@ -354,7 +358,7 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
     const originalToken = approveRes.body.data.authorizationToken;
 
     // Re-verify with modified price
-    const deal2 = { ...deal1, productPrice: deal1.productPrice - 100, totalPayable: deal1.totalPayable - 100 };
+    const deal2 = { ...deal1, productPrice: deal1.productPrice - 5, totalPayable: deal1.totalPayable - 5 };
     await request(app)
       .post(`/api/deals/${mockIntent.id}/verify`)
       .set('x-user-id', userId)
@@ -606,5 +610,120 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
       .expect(400);
 
     expect(secondCheckout.body.error).toMatch(/already been completed/i);
+  });
+
+  // ---------------------------------------------------------------------------
+  // SECTION 4: Preflight Diagnostics & PayPal Currency Safety
+  // ---------------------------------------------------------------------------
+  it('E2E-9: Diagnostic preflight endpoint verifies Sandbox readiness and currency allowlists with zero side-effects', async () => {
+    const res = await request(app)
+      .get('/api/preflight?currency=USD')
+      .expect(200);
+
+    expect(res.body.success).toBe(true);
+    expect(res.body.preflight.paypal.env).toBe('sandbox');
+    expect(res.body.preflight.paypal.isSandboxOnly).toBe(true);
+    expect(res.body.preflight.currencies.supportedList).toContain('USD');
+    expect(res.body.preflight.currencies.supportedList).not.toContain('INR');
+    expect(res.body.preflight.currencies.queryCheck.isSupported).toBe(true);
+
+    // Verify querying an unsupported currency in preflight marks it unsupported safely
+    const inrRes = await request(app)
+      .get('/api/preflight?currency=INR')
+      .expect(200);
+    expect(inrRes.body.preflight.currencies.queryCheck.isSupported).toBe(false);
+  });
+
+  it('E2E-10: Rejecting unsupported INR checkout prevents PayPal order creation and preserves deal integrity', async () => {
+    const userId = 'buyer-currency-fail';
+    const inrIntent: UserIntent = { ...mockIntent, id: 'deal-inr-safety', currency: 'INR', maxBudget: 8000 };
+    const inrDeal = {
+      dealId: 'deal-inr-safety',
+      originalOfferId: 'off-inr',
+      sellerId: 'off-inr',
+      sellerName: 'INR Merchant',
+      productTitle: mockIntent.productTitle,
+      condition: 'new' as const,
+      productPrice: 7000,
+      deliveryFee: 0,
+      otherCharges: 0,
+      totalPayable: 7000,
+      deliveryEstimateDays: 2,
+      warrantyMonths: 12,
+      hasSubscription: false,
+      negotiationStatus: 'agreed' as const,
+      roundCount: 1,
+      messages: [],
+      isAcceptedBySeller: true,
+      currency: 'INR' as const,
+      totalSaved: 0,
+      stopReason: 'agreed' as const,
+    };
+
+    await request(app).post('/api/deals').set('x-user-id', userId).send({ intent: inrIntent, finalDeal: inrDeal }).expect(201);
+    await request(app).post(`/api/deals/${inrIntent.id}/verify`).set('x-user-id', userId).expect(200);
+    await request(app).post(`/api/deals/${inrIntent.id}/approval-request`).set('x-user-id', userId).expect(201);
+    const apprRes = await request(app).post(`/api/deals/${inrIntent.id}/approve`).set('x-user-id', userId).expect(200);
+
+    const initialOrderCount = mockPayPal.orders.size;
+
+    const checkoutRes = await request(app)
+      .post(`/api/deals/${inrIntent.id}/checkout`)
+      .set('x-user-id', userId)
+      .send({ authorizationToken: apprRes.body.data.authorizationToken })
+      .expect(400);
+
+    expect(checkoutRes.body.success).toBe(false);
+    expect(checkoutRes.body.error).toMatch(/Currency 'INR' is not supported by PayPal/i);
+
+    // Guarantee no PayPal order was ever created
+    expect(mockPayPal.orders.size).toBe(initialOrderCount);
+  });
+
+  it('E2E-11: Validates consistent USD currency across intent, deal, approval, and PayPal order throughout full lifecycle', async () => {
+    const userId = 'buyer-usd-consistency';
+    await request(app).post('/api/deals').set('x-user-id', userId).send({ intent: mockIntent }).expect(201);
+
+    const agreedDeal = {
+      dealId: mockIntent.id,
+      originalOfferId: 'off-usd',
+      sellerId: 'off-usd',
+      sellerName: 'US Merchant',
+      productTitle: mockIntent.productTitle,
+      condition: 'new' as const,
+      productPrice: 74,
+      deliveryFee: 0,
+      otherCharges: 0,
+      totalPayable: 74,
+      deliveryEstimateDays: 2,
+      warrantyMonths: 12,
+      hasSubscription: false,
+      negotiationStatus: 'agreed' as const,
+      roundCount: 1,
+      messages: [],
+      isAcceptedBySeller: true,
+      currency: 'USD' as const,
+      totalSaved: 11,
+      stopReason: 'agreed' as const,
+    };
+
+    const verifRes = await request(app).post(`/api/deals/${mockIntent.id}/verify`).set('x-user-id', userId).send({ finalDeal: agreedDeal }).expect(200);
+    expect(verifRes.body.data.status).toBe('VERIFIED');
+
+    await request(app).post(`/api/deals/${mockIntent.id}/approval-request`).set('x-user-id', userId).expect(201);
+    const appRes = await request(app).post(`/api/deals/${mockIntent.id}/approve`).set('x-user-id', userId).expect(200);
+
+    const checkoutRes = await request(app)
+      .post(`/api/deals/${mockIntent.id}/checkout`)
+      .set('x-user-id', userId)
+      .send({ authorizationToken: appRes.body.data.authorizationToken })
+      .expect(201);
+
+    expect(checkoutRes.body.data.currency).toBe('USD');
+    expect(checkoutRes.body.data.amount).toBe(74);
+
+    const orderInGateway = mockPayPal.orders.get(checkoutRes.body.data.paypalOrderId);
+    expect(orderInGateway.currency).toBe('USD');
+    expect(orderInGateway.amount).toBe(74);
   });
 });

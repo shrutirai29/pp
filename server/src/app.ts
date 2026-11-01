@@ -9,7 +9,7 @@ import { AuditRepository } from './repositories/auditRepository.js';
 import { PaymentRepository } from './repositories/paymentRepository.js';
 import { NegotiationRepository } from './repositories/negotiationRepository.js';
 import { PaymentService } from './services/paymentService.js';
-import { PayPalClient, HttpPayPalClient } from './services/paypalClient.js';
+import { PayPalClient, HttpPayPalClient, MockPayPalClient } from './services/paypalClient.js';
 import { LLMProvider } from './llm/types.js';
 import { createLLMProvider } from './llm/providerFactory.js';
 import { NegotiationCoordinator } from './services/negotiation/negotiationCoordinator.js';
@@ -73,14 +73,24 @@ export function createApp(
     auditRepo
   );
 
-  // PayPal client (Http client for live Sandbox, or injected mock for testing)
-  const paypalClient =
-    customPayPalClient ||
-    new HttpPayPalClient(
+  // PayPal client: Http client for live Sandbox credentials, Mock client for local dev/testing
+  let paypalClient: PayPalClient;
+  if (customPayPalClient) {
+    paypalClient = customPayPalClient;
+  } else if (config.PAYPAL_CLIENT_ID && config.PAYPAL_CLIENT_SECRET) {
+    paypalClient = new HttpPayPalClient(
       config.PAYPAL_CLIENT_ID,
       config.PAYPAL_CLIENT_SECRET,
       config.PAYPAL_BASE_URL
     );
+  } else {
+    if (config.NODE_ENV === 'production') {
+      throw new Error(
+        'Production configuration error: PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET are required in production. Simulated mock payment is prohibited in production.'
+      );
+    }
+    paypalClient = new MockPayPalClient();
+  }
 
   // Dedicated Payment Service
   const paymentService = new PaymentService(

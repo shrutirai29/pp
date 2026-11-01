@@ -299,7 +299,29 @@ export const PayPalCheckoutModal: React.FC<PayPalCheckoutModalProps> = ({
                   {formatCurrency(orderData.amount, orderData.currency as CurrencyCode)}
                 </span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Gateway Mode:</span>
+                <span className="font-mono text-slate-300 uppercase">
+                  {orderData.gatewayMode || (orderData.isSimulated ? 'mock_sandbox' : 'live_sandbox')}
+                </span>
+              </div>
             </div>
+
+            {orderData.gatewayMode === 'mock_sandbox' || orderData.isSimulated ? (
+              <div className="rounded-lg border border-amber-800/60 bg-amber-950/30 p-2.5 text-xs text-amber-300 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
+                <div>
+                  <span className="font-semibold">Mock Simulation Mode:</span> Local test client active (credentials not configured). No live charges will occur with PayPal.
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-emerald-800/60 bg-emerald-950/30 p-2.5 text-xs text-emerald-300 flex items-start gap-2">
+                <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-400 mt-0.5" />
+                <div>
+                  <span className="font-semibold">PayPal Sandbox Live:</span> Connected to official PayPal Sandbox REST API endpoint.
+                </div>
+              </div>
+            )}
 
             <p className="text-xs text-slate-300">
               In a full popup flow, PayPal Sandbox credentials authenticate the buyer. Click below to simulate buyer
@@ -355,7 +377,22 @@ export const PayPalCheckoutModal: React.FC<PayPalCheckoutModalProps> = ({
                 <CheckCircle2 className="h-6 w-6" />
               </div>
               <div>
-                <h4 className="text-base font-bold text-white">PayPal Sandbox Payment Confirmed!</h4>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-base font-bold text-white">
+                    {captureData.gatewayMode === 'mock_sandbox' || captureData.isSimulated
+                      ? 'Simulated Mock Payment Confirmed'
+                      : 'PayPal Sandbox Payment Confirmed!'}
+                  </h4>
+                  {captureData.gatewayMode === 'mock_sandbox' || captureData.isSimulated ? (
+                    <Badge variant="warning" size="sm" className="font-mono text-[10px]">
+                      MOCK
+                    </Badge>
+                  ) : (
+                    <Badge variant="success" size="sm" className="font-mono text-[10px]">
+                      SANDBOX
+                    </Badge>
+                  )}
+                </div>
                 <p className="text-xs text-emerald-300/80">Funds successfully secured. Authorization token consumed.</p>
               </div>
             </div>
@@ -364,6 +401,12 @@ export const PayPalCheckoutModal: React.FC<PayPalCheckoutModalProps> = ({
               <div className="flex justify-between">
                 <span className="text-slate-400 font-sans">Payment Status:</span>
                 <span className="text-emerald-400 font-bold uppercase">{captureData.status}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400 font-sans">Gateway Mode:</span>
+                <span className="text-slate-300 uppercase">
+                  {captureData.gatewayMode || (captureData.isSimulated ? 'mock_sandbox' : 'live_sandbox')}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400 font-sans">PayPal Capture ID:</span>

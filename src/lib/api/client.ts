@@ -56,6 +56,8 @@ export interface PayPalCheckoutResponse {
   amount: number;
   currency: string;
   approvalUrl?: string;
+  isSimulated?: boolean;
+  gatewayMode?: 'live_sandbox' | 'mock_sandbox';
 }
 
 export interface PayPalCaptureResponse {
@@ -68,6 +70,8 @@ export interface PayPalCaptureResponse {
   currency: string;
   payerEmail?: string;
   message: string;
+  isSimulated?: boolean;
+  gatewayMode?: 'live_sandbox' | 'mock_sandbox';
 }
 
 export interface StoredPaymentInfo {

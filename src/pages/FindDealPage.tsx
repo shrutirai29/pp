@@ -21,10 +21,10 @@ interface FindDealPageProps {
 }
 
 const EXAMPLE_REQUEST = {
-  rawQuery: 'Find me a new 1 TB SSD under ₹8,000, delivered within three days, with no subscriptions or additional charges.',
+  rawQuery: 'Find me a new 1 TB NVMe SSD under $85, delivered within three days, with no subscriptions or additional charges.',
   productTitle: '1TB NVMe M.2 SSD',
-  maxBudget: 8000,
-  currency: 'INR' as CurrencyCode,
+  maxBudget: 85,
+  currency: 'USD' as CurrencyCode,
   requiredCondition: 'new' as IntentCondition,
   maxDeliveryDays: 3,
   requiredWarrantyMonths: 12,
@@ -61,7 +61,7 @@ export const FindDealPage: React.FC<FindDealPageProps> = ({ onSubmit, onCancel }
       rawQuery: '',
       productTitle: '',
       maxBudget: '',
-      currency: 'INR',
+      currency: 'USD',
       requiredCondition: 'new',
       maxDeliveryDays: 5,
       requiredWarrantyMonths: 12,
@@ -171,7 +171,7 @@ export const FindDealPage: React.FC<FindDealPageProps> = ({ onSubmit, onCancel }
                 setFormData({ ...formData, rawQuery: e.target.value });
                 if (errors.rawQuery) setErrors({ ...errors, rawQuery: undefined });
               }}
-              placeholder="e.g. Find me a new 1 TB SSD under ₹8,000, delivered within three days, with no subscriptions or additional charges."
+              placeholder="e.g. Find me a new 1 TB NVMe SSD under $85, delivered within three days, with no subscriptions or additional charges."
               className={`w-full rounded-xl bg-navy-950 px-4 py-3 text-sm text-slate-100 placeholder-slate-500 border focus:outline-none focus:ring-2 focus:ring-electric-500 transition-colors ${
                 errors.rawQuery ? 'border-rose-500 ring-1 ring-rose-500' : 'border-navy-700'
               }`}
@@ -256,10 +256,10 @@ export const FindDealPage: React.FC<FindDealPageProps> = ({ onSubmit, onCancel }
                 onChange={(e) => setFormData({ ...formData, currency: e.target.value as CurrencyCode })}
                 className="w-full rounded-lg bg-navy-950 px-3.5 py-2 text-sm text-slate-100 border border-navy-700 focus:outline-none focus:ring-2 focus:ring-electric-500"
               >
-                <option value="INR">INR (₹) - Indian Rupee</option>
-                <option value="USD">USD ($) - US Dollar</option>
-                <option value="EUR">EUR (€) - Euro</option>
-                <option value="GBP">GBP (£) - British Pound</option>
+                <option value="USD">USD ($) - US Dollar (PayPal Supported)</option>
+                <option value="EUR">EUR (€) - Euro (PayPal Supported)</option>
+                <option value="GBP">GBP (£) - British Pound (PayPal Supported)</option>
+                <option value="INR">INR (₹) - Indian Rupee (Demo / Local Only)</option>
               </select>
             </div>
 

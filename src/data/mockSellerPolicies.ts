@@ -12,9 +12,9 @@ export const MOCK_SELLER_POLICIES: Record<string, SellerPolicy> = {
     sellerId: 'off-techhaven-01',
     sellerName: 'TechHaven Direct',
     profileType: 'flexible',
-    startingPrice: 7299,
-    privateMinimumAcceptablePrice: 6600,
-    maxPermittedDiscount: 0.10, // up to 10%
+    startingPrice: 74,
+    privateMinimumAcceptablePrice: 66,
+    maxPermittedDiscount: 0.11, // up to 11%
     deliveryOptions: {
       standardDays: 2,
       expressDays: 1,
@@ -35,13 +35,13 @@ export const MOCK_SELLER_POLICIES: Record<string, SellerPolicy> = {
     sellerId: 'off-strict-titan',
     sellerName: 'Titan Silicon Direct',
     profileType: 'strict',
-    startingPrice: 7900,
-    privateMinimumAcceptablePrice: 7650, // very tight floor, only 3.1% max discount
-    maxPermittedDiscount: 0.035,
+    startingPrice: 84,
+    privateMinimumAcceptablePrice: 80, // tight floor
+    maxPermittedDiscount: 0.05,
     deliveryOptions: {
       standardDays: 2,
     },
-    deliveryFee: 100,
+    deliveryFee: 4,
     otherCharges: 0,
     condition: 'new',
     warrantyMonths: 36,
@@ -49,27 +49,27 @@ export const MOCK_SELLER_POLICIES: Record<string, SellerPolicy> = {
     canWaiveDeliveryFee: false,
     canExtendWarranty: false,
     acceptsNegotiation: true,
-    policyNotes: 'Exclusive distributor policy. Fixed price model with minimal flexibility (<3.5%). Rejects aggressively below minimum floor.',
+    policyNotes: 'Exclusive distributor policy. Fixed price model with minimal flexibility (<5%). Rejects aggressively below minimum floor.',
   },
 
-  // 3. Conditional Seller: Prime Storage Depot / NovaTech
+  // 3. Conditional Seller: Prime Storage Solutions
   'off-conditional-prime': {
     sellerId: 'off-conditional-prime',
     sellerName: 'Prime Storage Solutions',
     profileType: 'conditional',
-    startingPrice: 7600,
-    privateMinimumAcceptablePrice: 6900,
-    maxPermittedDiscount: 0.09,
+    startingPrice: 78,
+    privateMinimumAcceptablePrice: 70,
+    maxPermittedDiscount: 0.10,
     deliveryOptions: {
       standardDays: 3,
       expressDays: 2,
     },
-    deliveryFee: 200,
+    deliveryFee: 5,
     otherCharges: 0,
     condition: 'new',
     warrantyMonths: 24,
     hasSubscription: false,
-    canWaiveDeliveryFee: true, // willing to waive ₹200 delivery fee as concession!
+    canWaiveDeliveryFee: true, // willing to waive $5 delivery fee as concession
     canExtendWarranty: true,
     extendedWarrantyMonths: 36,
     acceptsNegotiation: true,
@@ -81,13 +81,13 @@ export const MOCK_SELLER_POLICIES: Record<string, SellerPolicy> = {
     sellerId: 'off-apex-03',
     sellerName: 'Apex Silicon Hub',
     profileType: 'strict',
-    startingPrice: 8499,
-    privateMinimumAcceptablePrice: 8150,
-    maxPermittedDiscount: 0.04,
+    startingPrice: 98,
+    privateMinimumAcceptablePrice: 92,
+    maxPermittedDiscount: 0.06,
     deliveryOptions: {
       standardDays: 2,
     },
-    deliveryFee: 150,
+    deliveryFee: 5,
     otherCharges: 0,
     condition: 'new',
     warrantyMonths: 60,
