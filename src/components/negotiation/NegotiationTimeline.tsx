@@ -11,6 +11,7 @@ import {
   ArrowRight,
   Info,
   XCircle,
+  AlertTriangle,
   HelpCircle,
   Layers,
   Clock,
@@ -23,6 +24,7 @@ interface NegotiationTimelineProps {
   session: NegotiationSession;
   engineMode?: 'live_llm' | 'mock_llm' | 'deterministic_fallback';
   providerName?: string;
+  fallbackReason?: string;
   isNegotiating?: boolean;
   onProceedToVerification: () => void;
   onBackToWorkspace: () => void;
@@ -33,6 +35,7 @@ export const NegotiationTimeline: React.FC<NegotiationTimelineProps> = ({
   session,
   engineMode,
   providerName,
+  fallbackReason,
   isNegotiating,
   onProceedToVerification,
   onBackToWorkspace,
@@ -58,7 +61,7 @@ export const NegotiationTimeline: React.FC<NegotiationTimelineProps> = ({
       >
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex flex-wrap items-center gap-2 mb-1.5">
               <span
                 className={`h-2 w-2 rounded-full ${
                   isAgreed ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'
@@ -77,19 +80,38 @@ export const NegotiationTimeline: React.FC<NegotiationTimelineProps> = ({
                 Simulated Seller Agent
               </span>
               {engineMode === 'live_llm' ? (
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-electric-950 border border-electric-500/50 text-electric-300 font-semibold">
-                  Live LLM Agent ({providerName || 'backend'})
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 border border-emerald-500/60 text-emerald-300 font-bold flex items-center gap-1">
+                  <Sparkles className="h-3 w-3 text-emerald-400 animate-pulse" />
+                  LIVE GROQ ({providerName || 'llama-3.3-70b-versatile'})
                 </span>
               ) : engineMode === 'mock_llm' ? (
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950/80 border border-amber-600/50 text-amber-300">
-                  Mock LLM Mode (Offline Dev)
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950/80 border border-amber-600/60 text-amber-300 font-medium flex items-center gap-1">
+                  <Layers className="h-3 w-3 text-amber-400" />
+                  MOCK LLM (Offline Dev Simulation)
                 </span>
               ) : (
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-400">
-                  Deterministic Policy Fallback
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-amber-500/40 text-amber-300 font-medium flex items-center gap-1">
+                  <HelpCircle className="h-3 w-3 text-amber-400" />
+                  DETERMINISTIC FALLBACK (Rule-Based Policy)
                 </span>
               )}
             </div>
+
+            {/* Explicit Notice when fallback was engaged */}
+            {engineMode === 'deterministic_fallback' && (
+              <div className="mb-2 rounded-lg border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-xs text-amber-200/90 flex items-start gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold text-amber-300">Deterministic Fallback Notice: </span>
+                  Negotiation executed via local rule-based policies for demonstration. This is not a live Groq negotiation.
+                  {fallbackReason && (
+                    <span className="block text-[11px] text-slate-400 mt-0.5 font-mono">
+                      Reason: {fallbackReason}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
 
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
               Autonomous Dialogue with {session.sellerName}

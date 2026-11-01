@@ -11,6 +11,7 @@ import { SellerPolicyValidator } from '../src/services/negotiation/sellerPolicyV
 import { BuyerAgentGuard } from '../src/services/negotiation/buyerAgentGuard.js';
 import { sanitizeForPrompt } from '../src/services/negotiation/promptSanitizer.js';
 import { getServerSellerPolicy } from '../src/data/sellerPolicies.js';
+import { createSessionToken } from '../src/services/authService.js';
 
 const testConfig: EnvConfig = {
   PORT: 4002,
@@ -65,14 +66,14 @@ describe('Phase 6: Real LLM-Powered Multi-Agent Negotiation & IntentLock Preserv
     // 1. Create deal
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: mockIntent, title: mockIntent.productTitle })
       .expect(201);
 
     // 2. Run negotiation
     const res = await request(app)
       .post(`/api/deals/${mockIntent.id}/negotiate`)
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .send({
         offerId: 'off-techhaven-01',
       })
@@ -100,13 +101,13 @@ describe('Phase 6: Real LLM-Powered Multi-Agent Negotiation & IntentLock Preserv
   it('2. Enforces strict decimal-safe total recalculation (totalPayable = productPrice + deliveryFee + otherCharges)', async () => {
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: mockIntent })
       .expect(201);
 
     const res = await request(app)
       .post(`/api/deals/${mockIntent.id}/negotiate`)
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .send({ offerId: 'off-conditional-prime' })
       .expect(200);
 
@@ -142,13 +143,13 @@ describe('Phase 6: Real LLM-Powered Multi-Agent Negotiation & IntentLock Preserv
   it('4. Fixed-price seller policy immediately rejects negotiation concessions', async () => {
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: mockIntent })
       .expect(201);
 
     const res = await request(app)
       .post(`/api/deals/${mockIntent.id}/negotiate`)
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .send({ offerId: 'off-fixed-retail' }) // fixed retail merchant
       .expect(200);
 
@@ -237,13 +238,13 @@ describe('Phase 6: Real LLM-Powered Multi-Agent Negotiation & IntentLock Preserv
 
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: mockIntent })
       .expect(201);
 
     const res = await request(app)
       .post(`/api/deals/${mockIntent.id}/negotiate`)
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .send({ offerId: 'off-strict-titan' })
       .expect(200);
 
@@ -260,13 +261,13 @@ describe('Phase 6: Real LLM-Powered Multi-Agent Negotiation & IntentLock Preserv
 
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: mockIntent })
       .expect(201);
 
     const res = await request(app)
       .post(`/api/deals/${mockIntent.id}/negotiate`)
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .send({ offerId: 'off-techhaven-01' })
       .expect(200);
 
@@ -284,13 +285,13 @@ describe('Phase 6: Real LLM-Powered Multi-Agent Negotiation & IntentLock Preserv
 
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: mockIntent })
       .expect(201);
 
     const res = await request(app)
       .post(`/api/deals/${mockIntent.id}/negotiate`)
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .send({ offerId: 'off-techhaven-01' })
       .expect(200);
 
@@ -306,13 +307,13 @@ describe('Phase 6: Real LLM-Powered Multi-Agent Negotiation & IntentLock Preserv
 
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: mockIntent })
       .expect(201);
 
     const res = await request(app)
       .post(`/api/deals/${mockIntent.id}/negotiate`)
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .send({ offerId: 'off-techhaven-01' })
       .expect(200);
 
@@ -330,7 +331,7 @@ describe('Phase 6: Real LLM-Powered Multi-Agent Negotiation & IntentLock Preserv
 
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .send({
         intent: { ...mockIntent, productTitle: maliciousTitle },
       })
@@ -338,7 +339,7 @@ describe('Phase 6: Real LLM-Powered Multi-Agent Negotiation & IntentLock Preserv
 
     const res = await request(app)
       .post(`/api/deals/${mockIntent.id}/negotiate`)
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .send({
         offerId: 'off-techhaven-01',
         productOffer: {
@@ -367,19 +368,19 @@ describe('Phase 6: Real LLM-Powered Multi-Agent Negotiation & IntentLock Preserv
   it('12. Negotiation never mutates the original authoritative UserIntent record', async () => {
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: mockIntent })
       .expect(201);
 
     await request(app)
       .post(`/api/deals/${mockIntent.id}/negotiate`)
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .send({ offerId: 'off-techhaven-01' })
       .expect(200);
 
     const dealRes = await request(app)
       .get(`/api/deals/${mockIntent.id}`)
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .expect(200);
 
     expect(dealRes.body.data.intent.maxBudget).toBe(mockIntent.maxBudget);
@@ -393,13 +394,13 @@ describe('Phase 6: Real LLM-Powered Multi-Agent Negotiation & IntentLock Preserv
   it('13. Rejects cross-user negotiation requests with 403 Forbidden', async () => {
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', 'legit-user')
+      .set('Authorization', 'Bearer ' + createSessionToken('legit-user', testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: mockIntent })
       .expect(201);
 
     const res = await request(app)
       .post(`/api/deals/${mockIntent.id}/negotiate`)
-      .set('x-user-id', 'attacker-user') // Different user!
+      .set('Authorization', 'Bearer ' + createSessionToken('attacker-user', testConfig.TOKEN_HMAC_SECRET)) // Different user!
       .send({ offerId: 'off-techhaven-01' })
       .expect(403);
 
@@ -413,21 +414,21 @@ describe('Phase 6: Real LLM-Powered Multi-Agent Negotiation & IntentLock Preserv
   it('14. LLM agreement CANNOT bypass IntentLock: checkout is rejected if deal has not undergone verification and human approval', async () => {
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: mockIntent })
       .expect(201);
 
     // 1. Run LLM negotiation to agreement
     await request(app)
       .post(`/api/deals/${mockIntent.id}/negotiate`)
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .send({ offerId: 'off-techhaven-01' })
       .expect(200);
 
     // 2. Direct attempt to initiate checkout without IntentLock verification or human approval
     const checkoutRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/checkout`)
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .send({})
       .expect(400);
 
@@ -441,13 +442,13 @@ describe('Phase 6: Real LLM-Powered Multi-Agent Negotiation & IntentLock Preserv
   it('15. Disqualifies ineligible offers (e.g. currency mismatch) before negotiation opens', async () => {
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: mockIntent }) // INR
       .expect(201);
 
     const res = await request(app)
       .post(`/api/deals/${mockIntent.id}/negotiate`)
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .send({
         offerId: 'off-usd-mismatch',
         productOffer: {
@@ -532,19 +533,19 @@ describe('Phase 6: Real LLM-Powered Multi-Agent Negotiation & IntentLock Preserv
   it('17. Retrieves persisted negotiation records and rounds via GET /api/deals/:id/negotiations', async () => {
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: mockIntent })
       .expect(201);
 
     const negRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/negotiate`)
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .send({ offerId: 'off-techhaven-01' })
       .expect(200);
 
     const getRes = await request(app)
       .get(`/api/deals/${mockIntent.id}/negotiations`)
-      .set('x-user-id', 'user-1')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-1', testConfig.TOKEN_HMAC_SECRET))
       .expect(200);
 
     expect(getRes.body.success).toBe(true);

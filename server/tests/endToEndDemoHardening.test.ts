@@ -7,6 +7,7 @@ import { EnvConfig } from '../src/config/env.js';
 import { UserIntent } from '../src/schemas/dealSchemas.js';
 import { MockLLMProvider } from '../src/llm/mockProvider.js';
 import { PayPalClient, PayPalOrderParams, PayPalCaptureResult } from '../src/services/paypalClient.js';
+import { createSessionToken } from '../src/services/authService.js';
 
 class MockPayPalGateway implements PayPalClient {
   public orders = new Map<string, any>();
@@ -120,7 +121,7 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
     // 1. Create Deal & UserIntent
     const createRes = await request(app)
       .post('/api/deals')
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: mockIntent, title: mockIntent.productTitle })
       .expect(201);
 
@@ -161,7 +162,7 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
 
     const rankRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/rank-offers`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ offers: sampleOffers })
       .expect(200);
 
@@ -172,7 +173,7 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
     // 3. Run Multi-Agent Negotiation
     const negRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/negotiate`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({
         offerId: 'off-techhaven-01',
         productOffer: sampleOffers[0],
@@ -188,7 +189,7 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
     // 4. Verify Persistent Negotiation History in SQLite
     const negHistoryRes = await request(app)
       .get(`/api/deals/${mockIntent.id}/negotiations`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .expect(200);
 
     expect(negHistoryRes.body.success).toBe(true);
@@ -197,7 +198,7 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
     // 5. IntentLock Independent Server Verification
     const verifRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/verify`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ finalDeal })
       .expect(200);
 
@@ -208,7 +209,7 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
     // 6. Request Explicit Human Approval
     const apprReqRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/approval-request`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .expect(201);
 
     expect(apprReqRes.body.success).toBe(true);
@@ -217,7 +218,7 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
     // 7. Explicit Human Purchase Approval Grant
     const approveRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/approve`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .expect(200);
 
     expect(approveRes.body.success).toBe(true);
@@ -228,7 +229,7 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
     // 8. PayPal Sandbox Order Creation
     const checkoutRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/checkout`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken })
       .expect(201);
 
@@ -240,7 +241,7 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
     // 9. PayPal Sandbox Capture Simulation
     const captureRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/capture`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ paypalOrderId })
       .expect(200);
 
@@ -251,7 +252,7 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
     // 10. Authoritative Payment Status Confirmation
     const paymentRes = await request(app)
       .get(`/api/deals/${mockIntent.id}/payment`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .expect(200);
 
     expect(paymentRes.body.success).toBe(true);
@@ -261,7 +262,7 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
     // 11. Retrieve Complete Audit Trail
     const auditRes = await request(app)
       .get(`/api/deals/${mockIntent.id}/audit`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .expect(200);
 
     expect(auditRes.body.success).toBe(true);
@@ -282,7 +283,7 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
     const userId = 'buyer-02';
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: mockIntent })
       .expect(201);
 
@@ -311,7 +312,7 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
 
     const verifRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/verify`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ finalDeal: overBudgetDeal })
       .expect(200);
 
@@ -321,7 +322,7 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
     // Approval request on rejected deal is blocked
     const apprRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/approval-request`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .expect(400);
 
     expect(apprRes.body.error).toMatch(/Cannot request human approval for deal with verification status: REJECTED/i);
@@ -331,29 +332,29 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
     const userId = 'buyer-03';
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: mockIntent })
       .expect(201);
 
     // Initial valid negotiation and verification
     const negRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/negotiate`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ offerId: 'off-techhaven-01' });
 
     const deal1 = negRes.body.data.finalDeal;
     await request(app)
       .post(`/api/deals/${mockIntent.id}/verify`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ finalDeal: deal1 });
 
     const apprRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/approval-request`)
-      .set('x-user-id', userId);
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET));
 
     const approveRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/approve`)
-      .set('x-user-id', userId);
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET));
 
     const originalToken = approveRes.body.data.authorizationToken;
 
@@ -361,14 +362,14 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
     const deal2 = { ...deal1, productPrice: deal1.productPrice - 5, totalPayable: deal1.totalPayable - 5 };
     await request(app)
       .post(`/api/deals/${mockIntent.id}/verify`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ finalDeal: deal2 })
       .expect(200);
 
     // Attempting to checkout using original token must be rejected because approval was invalidated
     const checkoutRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/checkout`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: originalToken })
       .expect(400);
 
@@ -387,28 +388,28 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
 
     await request(shortLivedApp)
       .post('/api/deals')
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: mockIntent })
       .expect(201);
 
     const negRes = await request(shortLivedApp)
       .post(`/api/deals/${mockIntent.id}/negotiate`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ offerId: 'off-techhaven-01' });
 
     await request(shortLivedApp)
       .post(`/api/deals/${mockIntent.id}/verify`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ finalDeal: negRes.body.data.finalDeal });
 
     await request(shortLivedApp)
       .post(`/api/deals/${mockIntent.id}/approval-request`)
-      .set('x-user-id', userId);
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET));
 
     // In 0-second TTL, approval expires immediately
     const approveRes = await request(shortLivedApp)
       .post(`/api/deals/${mockIntent.id}/approve`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .expect(400);
 
     expect(approveRes.body.error).toMatch(/expired/i);
@@ -418,34 +419,34 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
     const userId = 'buyer-05';
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: mockIntent })
       .expect(201);
 
     const negRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/negotiate`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ offerId: 'off-techhaven-01' });
 
     await request(app)
       .post(`/api/deals/${mockIntent.id}/verify`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ finalDeal: negRes.body.data.finalDeal });
 
     await request(app)
       .post(`/api/deals/${mockIntent.id}/approval-request`)
-      .set('x-user-id', userId);
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET));
 
     // User explicitly declines deal
     await request(app)
       .post(`/api/deals/${mockIntent.id}/decline`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .expect(200);
 
     // Checkout must fail
     const checkoutRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/checkout`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({})
       .expect(400);
 
@@ -459,33 +460,33 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
     const userId = 'buyer-06';
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: mockIntent })
       .expect(201);
 
     const negRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/negotiate`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ offerId: 'off-techhaven-01' });
 
     const finalDeal = negRes.body.data.finalDeal;
     await request(app)
       .post(`/api/deals/${mockIntent.id}/verify`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ finalDeal });
 
     await request(app)
       .post(`/api/deals/${mockIntent.id}/approval-request`)
-      .set('x-user-id', userId);
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET));
 
     const approveRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/approve`)
-      .set('x-user-id', userId);
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET));
 
     // Client attempts to pass fraudulent amount = 10 into checkout
     const checkoutRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/checkout`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({
         authorizationToken: approveRes.body.data.authorizationToken,
         amount: 10, // Attempted tampering
@@ -501,31 +502,31 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
     const userId = 'buyer-07';
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: mockIntent })
       .expect(201);
 
     const negRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/negotiate`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ offerId: 'off-techhaven-01' });
 
     await request(app)
       .post(`/api/deals/${mockIntent.id}/verify`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ finalDeal: negRes.body.data.finalDeal });
 
     await request(app)
       .post(`/api/deals/${mockIntent.id}/approval-request`)
-      .set('x-user-id', userId);
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET));
 
     const approveRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/approve`)
-      .set('x-user-id', userId);
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET));
 
     const checkoutRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/checkout`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: approveRes.body.data.authorizationToken });
 
     const orderId = checkoutRes.body.data.paypalOrderId;
@@ -535,7 +536,7 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
 
     const captureAttempt1 = await request(app)
       .post(`/api/deals/${mockIntent.id}/capture`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ paypalOrderId: orderId })
       .expect(502);
 
@@ -544,7 +545,7 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
     // Verify stored payment state is REQUIRES_RECONCILIATION
     const checkState = await request(app)
       .get(`/api/deals/${mockIntent.id}/payment`)
-      .set('x-user-id', userId);
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET));
 
     expect(checkState.body.data.status).toBe('REQUIRES_RECONCILIATION');
 
@@ -554,7 +555,7 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
 
     const captureAttempt2 = await request(app)
       .post(`/api/deals/${mockIntent.id}/capture`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ paypalOrderId: orderId })
       .expect(200);
 
@@ -566,31 +567,31 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
     const userId = 'buyer-08';
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: mockIntent })
       .expect(201);
 
     const negRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/negotiate`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ offerId: 'off-techhaven-01' });
 
     await request(app)
       .post(`/api/deals/${mockIntent.id}/verify`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ finalDeal: negRes.body.data.finalDeal });
 
     await request(app)
       .post(`/api/deals/${mockIntent.id}/approval-request`)
-      .set('x-user-id', userId);
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET));
 
     const approveRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/approve`)
-      .set('x-user-id', userId);
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET));
 
     const checkoutRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/checkout`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: approveRes.body.data.authorizationToken });
 
     const orderId = checkoutRes.body.data.paypalOrderId;
@@ -598,14 +599,14 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
     // First capture completes
     await request(app)
       .post(`/api/deals/${mockIntent.id}/capture`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ paypalOrderId: orderId })
       .expect(200);
 
     // Attempting to create a second checkout order for the completed deal is rejected
     const secondCheckout = await request(app)
       .post(`/api/deals/${mockIntent.id}/checkout`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({})
       .expect(400);
 
@@ -660,16 +661,16 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
       stopReason: 'agreed' as const,
     };
 
-    await request(app).post('/api/deals').set('x-user-id', userId).send({ intent: inrIntent, finalDeal: inrDeal }).expect(201);
-    await request(app).post(`/api/deals/${inrIntent.id}/verify`).set('x-user-id', userId).expect(200);
-    await request(app).post(`/api/deals/${inrIntent.id}/approval-request`).set('x-user-id', userId).expect(201);
-    const apprRes = await request(app).post(`/api/deals/${inrIntent.id}/approve`).set('x-user-id', userId).expect(200);
+    await request(app).post('/api/deals').set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET)).send({ intent: inrIntent, finalDeal: inrDeal }).expect(201);
+    await request(app).post(`/api/deals/${inrIntent.id}/verify`).set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET)).expect(200);
+    await request(app).post(`/api/deals/${inrIntent.id}/approval-request`).set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET)).expect(201);
+    const apprRes = await request(app).post(`/api/deals/${inrIntent.id}/approve`).set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET)).expect(200);
 
     const initialOrderCount = mockPayPal.orders.size;
 
     const checkoutRes = await request(app)
       .post(`/api/deals/${inrIntent.id}/checkout`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: apprRes.body.data.authorizationToken })
       .expect(400);
 
@@ -682,7 +683,7 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
 
   it('E2E-11: Validates consistent USD currency across intent, deal, approval, and PayPal order throughout full lifecycle', async () => {
     const userId = 'buyer-usd-consistency';
-    await request(app).post('/api/deals').set('x-user-id', userId).send({ intent: mockIntent }).expect(201);
+    await request(app).post('/api/deals').set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET)).send({ intent: mockIntent }).expect(201);
 
     const agreedDeal = {
       dealId: mockIntent.id,
@@ -707,15 +708,15 @@ describe('Phase 7: End-to-End Integration & Security Hardening Suite', () => {
       stopReason: 'agreed' as const,
     };
 
-    const verifRes = await request(app).post(`/api/deals/${mockIntent.id}/verify`).set('x-user-id', userId).send({ finalDeal: agreedDeal }).expect(200);
+    const verifRes = await request(app).post(`/api/deals/${mockIntent.id}/verify`).set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET)).send({ finalDeal: agreedDeal }).expect(200);
     expect(verifRes.body.data.status).toBe('VERIFIED');
 
-    await request(app).post(`/api/deals/${mockIntent.id}/approval-request`).set('x-user-id', userId).expect(201);
-    const appRes = await request(app).post(`/api/deals/${mockIntent.id}/approve`).set('x-user-id', userId).expect(200);
+    await request(app).post(`/api/deals/${mockIntent.id}/approval-request`).set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET)).expect(201);
+    const appRes = await request(app).post(`/api/deals/${mockIntent.id}/approve`).set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET)).expect(200);
 
     const checkoutRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/checkout`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: appRes.body.data.authorizationToken })
       .expect(201);
 

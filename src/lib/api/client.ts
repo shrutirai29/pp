@@ -18,13 +18,56 @@ export function getSessionUserId(): string {
   }
 }
 
+let cachedSessionToken: string | null = null;
+
+export async function getSessionToken(): Promise<string> {
+  if (cachedSessionToken) return cachedSessionToken;
+  try {
+    const stored = localStorage.getItem('dealmind_session_token');
+    if (stored) {
+      cachedSessionToken = stored;
+      return stored;
+    }
+  } catch {}
+
+  // Request a fresh verified session token from the backend
+  try {
+    const userId = getSessionUserId();
+    const res = await fetch(`${API_BASE}/api/auth/session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.data?.token) {
+        cachedSessionToken = data.data.token;
+        try {
+          localStorage.setItem('dealmind_session_token', data.data.token);
+        } catch {}
+        return data.data.token;
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to obtain signed session token:', err);
+  }
+
+  return '';
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE}${path}`;
-  const userId = getSessionUserId();
+
+  // Obtain verified session token for protected routes
+  const isPublicAuthRoute = path.startsWith('/api/auth/') || path === '/health' || path === '/api/config/paypal';
+  let token = '';
+  if (!isPublicAuthRoute) {
+    token = await getSessionToken();
+  }
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'x-user-id': userId,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers as Record<string, string> || {}),
   };
 
@@ -234,7 +277,7 @@ export const dealmindApi = {
    */
   async initiateCheckout(
     dealId: string,
-    authorizationToken?: string
+    authorizationToken: string
   ): Promise<{ success: boolean; data: PayPalCheckoutResponse }> {
     return request<{ success: boolean; data: PayPalCheckoutResponse }>(
       `/api/deals/${encodeURIComponent(dealId)}/checkout`,

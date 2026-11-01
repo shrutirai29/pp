@@ -57,9 +57,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </h1>
 
           <p className="text-sm sm:text-base text-slate-300 leading-relaxed max-w-2xl">
-            DealMind discovers real-time product quotes and simulates autonomous agent negotiation. 
-            Before any transaction can proceed, IntentLock independently audits seller terms against 
-            your non-negotiable budget, condition, and subscription constraints.
+            DealMind evaluates candidate product offers from a controlled demonstration catalogue and coordinates
+            autonomous agent negotiation. Before any checkout can proceed, IntentLock independently audits seller terms
+            against your non-negotiable budget, condition, and warranty constraints.
           </p>
 
           <div className="flex flex-wrap items-center gap-3 pt-2">
@@ -167,12 +167,23 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
       {/* Architecture Notice Banner */}
       <div className="rounded-xl border border-navy-800 bg-navy-950/70 p-4 text-xs text-slate-400 flex items-start gap-3">
-        <HelpCircle className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
-        <div className="space-y-1">
-          <p className="font-semibold text-slate-300">Phase 1 Controlled Demonstration Catalogue:</p>
-          <p>
-            All merchant offers and negotiation transcripts are generated locally by deterministic algorithms for testing state compliance and IntentLock verification. No live web scraper, real LLM token expenditure, or live payment authorization is engaged in this phase.
-          </p>
+        <HelpCircle className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
+        <div className="space-y-1.5">
+          <p className="font-semibold text-slate-200">System Architecture & Demonstration Notice:</p>
+          <ul className="space-y-1 list-disc list-inside text-slate-400">
+            <li>
+              <strong className="text-slate-300">Demonstration Catalogue:</strong> Seller offers originate from a curated, controlled demonstration catalogue. Live marketplace scraping is neither claimed nor performed.
+            </li>
+            <li>
+              <strong className="text-slate-300">Live Groq LLM Negotiation:</strong> Real multi-agent negotiation runs via Groq API when configured on the backend; mock LLM and deterministic fallback modes are clearly labeled and preserved for offline evaluation.
+            </li>
+            <li>
+              <strong className="text-slate-300">PayPal Sandbox Only:</strong> All payment checkouts execute strictly against the PayPal Sandbox environment. Production PayPal credentials and live payment capture are strictly prohibited.
+            </li>
+            <li>
+              <strong className="text-slate-300">IntentLock Gatekeeper:</strong> Negotiation acceptance alone never grants transaction authorization. Cryptographic single-use authorization is issued exclusively upon verified constraint compliance and explicit human approval.
+            </li>
+          </ul>
         </div>
       </div>
     </div>

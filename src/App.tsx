@@ -47,6 +47,7 @@ export function App() {
   const [finalDeal, setFinalDeal] = useState<FinalDeal | null>(
     negotiationResult.finalDeal
   );
+  const [negotiationFallbackReason, setNegotiationFallbackReason] = useState<string | undefined>(undefined);
 
   const [verificationReport, setVerificationReport] = useState<VerificationReport | null>(() => {
     return verifyDealWithIntentLock(DEFAULT_EXAMPLE_INTENT, negotiationResult.finalDeal);
@@ -284,20 +285,27 @@ export function App() {
     setCurrentView('negotiation');
 
     let neg: any;
+    let fallbackMsg: string | undefined = undefined;
+
     if (isServerOnline) {
       try {
         await dealmindApi.createDeal(activeIntent, undefined, activeIntent.productTitle);
         const srvRes = await dealmindApi.runNegotiation(activeIntent.id, offer.id, offer);
         if (srvRes.success && srvRes.data) {
           neg = srvRes.data;
+          setNegotiationFallbackReason(undefined);
         }
-      } catch (err) {
+      } catch (err: unknown) {
+        fallbackMsg = err instanceof Error ? err.message : 'Backend negotiation service unavailable';
         console.warn('Backend LLM negotiation returned error, falling back to local engine:', err);
       }
     }
 
     if (!neg) {
       neg = runIntelligentNegotiation(activeIntent, offer, offers);
+      neg.engineMode = 'deterministic_fallback';
+      neg.providerName = 'Local Rule-Based Heuristic Policy';
+      setNegotiationFallbackReason(fallbackMsg || 'Backend offline / local fallback mode active');
     }
 
     setNegotiationResult(neg);
@@ -355,19 +363,26 @@ export function App() {
     setIsNegotiating(true);
 
     let neg: any;
+    let fallbackMsg: string | undefined = undefined;
+
     if (isServerOnline) {
       try {
         const srvRes = await dealmindApi.runNegotiation(activeIntent.id, selectedOffer.id, selectedOffer);
         if (srvRes.success && srvRes.data) {
           neg = srvRes.data;
+          setNegotiationFallbackReason(undefined);
         }
-      } catch (err) {
+      } catch (err: unknown) {
+        fallbackMsg = err instanceof Error ? err.message : 'Backend negotiation service unavailable';
         console.warn('Backend LLM re-run error, using local engine:', err);
       }
     }
 
     if (!neg) {
       neg = runIntelligentNegotiation(activeIntent, selectedOffer, offers);
+      neg.engineMode = 'deterministic_fallback';
+      neg.providerName = 'Local Rule-Based Heuristic Policy';
+      setNegotiationFallbackReason(fallbackMsg || 'Backend offline / local fallback mode active');
     }
 
     setNegotiationResult(neg);
@@ -662,6 +677,7 @@ export function App() {
             offer={selectedOffer}
             engineMode={negotiationResult?.engineMode}
             providerName={negotiationResult?.providerName}
+            fallbackReason={negotiationFallbackReason}
             isNegotiating={isNegotiating}
             onProceedToVerification={handleProceedToVerification}
             onBackToWorkspace={() => setCurrentView('workspace')}

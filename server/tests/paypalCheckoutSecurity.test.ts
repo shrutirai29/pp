@@ -6,6 +6,7 @@ import { createApp } from '../src/app.js';
 import { EnvConfig, EnvSchema } from '../src/config/env.js';
 import { UserIntent, FinalDeal } from '../src/schemas/dealSchemas.js';
 import { PayPalClient, PayPalOrderParams, HttpPayPalClient } from '../src/services/paypalClient.js';
+import { createSessionToken } from '../src/services/authService.js';
 
 class MockPayPalClient implements PayPalClient {
   public isMock = true;
@@ -142,27 +143,27 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
     // 1. Create deal
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: { ...mockIntent, id: dealId }, finalDeal: mockValidFinalDeal })
       .expect(201);
 
     // 2. Verify deal
     const verifRes = await request(app)
       .post(`/api/deals/${dealId}/verify`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ finalDeal: mockValidFinalDeal })
       .expect(200);
 
     // 3. Request approval
     const apprReqRes = await request(app)
       .post(`/api/deals/${dealId}/approval-request`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .expect(201);
 
     // 4. Human approves
     const apprRes = await request(app)
       .post(`/api/deals/${dealId}/approve`)
-      .set('x-user-id', userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ approvalId: apprReqRes.body.data.id, finalDeal: mockValidFinalDeal })
       .expect(200);
 
@@ -179,13 +180,13 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
   it('1. Checkout is rejected with 400 for an unverified deal', async () => {
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', 'user-alice')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-alice', testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: mockIntent, finalDeal: mockValidFinalDeal })
       .expect(201);
 
     const res = await request(app)
       .post(`/api/deals/${mockIntent.id}/checkout`)
-      .set('x-user-id', 'user-alice')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-alice', testConfig.TOKEN_HMAC_SECRET))
       .send({})
       .expect(400);
 
@@ -203,19 +204,19 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', 'user-alice')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-alice', testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: mockIntent, finalDeal: invalidFinalDeal })
       .expect(201);
 
     await request(app)
       .post(`/api/deals/${mockIntent.id}/verify`)
-      .set('x-user-id', 'user-alice')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-alice', testConfig.TOKEN_HMAC_SECRET))
       .send({ finalDeal: invalidFinalDeal })
       .expect(200);
 
     const res = await request(app)
       .post(`/api/deals/${mockIntent.id}/checkout`)
-      .set('x-user-id', 'user-alice')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-alice', testConfig.TOKEN_HMAC_SECRET))
       .send({})
       .expect(400);
 
@@ -227,20 +228,20 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
   it('3. Checkout is rejected with 400 when human approval is missing', async () => {
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', 'user-alice')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-alice', testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: mockIntent, finalDeal: mockValidFinalDeal })
       .expect(201);
 
     await request(app)
       .post(`/api/deals/${mockIntent.id}/verify`)
-      .set('x-user-id', 'user-alice')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-alice', testConfig.TOKEN_HMAC_SECRET))
       .send({ finalDeal: mockValidFinalDeal })
       .expect(200);
 
     // No approval request or approval granted
     const res = await request(app)
       .post(`/api/deals/${mockIntent.id}/checkout`)
-      .set('x-user-id', 'user-alice')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-alice', testConfig.TOKEN_HMAC_SECRET))
       .send({})
       .expect(400);
 
@@ -261,7 +262,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const res = await request(app)
       .post(`/api/deals/${setup.dealId}/checkout`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: setup.authorizationToken })
       .expect(400);
 
@@ -288,7 +289,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const res = await request(app)
       .post(`/api/deals/${setup.dealId}/checkout`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: setup.authorizationToken })
       .expect(400);
 
@@ -302,7 +303,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const res = await request(app)
       .post(`/api/deals/${setup.dealId}/checkout`)
-      .set('x-user-id', 'user-mallory') // Mallory tries to checkout Alice's deal
+      .set('Authorization', 'Bearer ' + createSessionToken('user-mallory', testConfig.TOKEN_HMAC_SECRET)) // Mallory tries to checkout Alice's deal
       .send({})
       .expect(403);
 
@@ -316,7 +317,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const res = await request(app)
       .post(`/api/deals/${setup.dealId}/checkout`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: 'INVALID-FORGED-TOKEN-XYZ' })
       .expect(400);
 
@@ -341,7 +342,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const res = await request(app)
       .post(`/api/deals/${setup.dealId}/checkout`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: setup.authorizationToken })
       .expect(201);
 
@@ -361,7 +362,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const checkoutRes = await request(app)
       .post(`/api/deals/${setup.dealId}/checkout`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: setup.authorizationToken })
       .expect(201);
 
@@ -381,13 +382,13 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     await request(app)
       .post(`/api/deals/${setup.dealId}/checkout`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: setup.authorizationToken })
       .expect(201);
 
     const res = await request(app)
       .post(`/api/deals/${setup.dealId}/capture`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ paypalOrderId: 'UNRELATED-ORDER-99999' })
       .expect(404);
 
@@ -400,7 +401,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const checkoutRes = await request(app)
       .post(`/api/deals/${setup.dealId}/checkout`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: setup.authorizationToken })
       .expect(201);
 
@@ -408,7 +409,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const res = await request(app)
       .post(`/api/deals/${setup.dealId}/capture`)
-      .set('x-user-id', 'user-mallory') // Mallory tries to capture Alice's order
+      .set('Authorization', 'Bearer ' + createSessionToken('user-mallory', testConfig.TOKEN_HMAC_SECRET)) // Mallory tries to capture Alice's order
       .send({ paypalOrderId: orderId })
       .expect(403);
 
@@ -421,7 +422,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const checkoutRes = await request(app)
       .post(`/api/deals/${setup.dealId}/checkout`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: setup.authorizationToken })
       .expect(201);
 
@@ -432,7 +433,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const res = await request(app)
       .post(`/api/deals/${setup.dealId}/capture`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ paypalOrderId: orderId })
       .expect(400);
 
@@ -446,7 +447,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const checkoutRes = await request(app)
       .post(`/api/deals/${setup.dealId}/checkout`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: setup.authorizationToken })
       .expect(201);
 
@@ -454,7 +455,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const captureRes = await request(app)
       .post(`/api/deals/${setup.dealId}/capture`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ paypalOrderId: orderId })
       .expect(200);
 
@@ -483,13 +484,13 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const checkoutRes = await request(app)
       .post(`/api/deals/${setup.dealId}/checkout`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: setup.authorizationToken })
       .expect(201);
 
     const res = await request(app)
       .get(`/api/deals/${setup.dealId}/payment`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .expect(200);
 
     expect(res.body.success).toBe(true);
@@ -503,7 +504,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const checkoutRes = await request(app)
       .post(`/api/deals/${setup.dealId}/checkout`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: setup.authorizationToken })
       .expect(201);
 
@@ -512,7 +513,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
     // Capture 1
     const cap1 = await request(app)
       .post(`/api/deals/${setup.dealId}/capture`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ paypalOrderId: orderId })
       .expect(200);
 
@@ -521,7 +522,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
     // Capture 2 (immediate repeat / network retry)
     const cap2 = await request(app)
       .post(`/api/deals/${setup.dealId}/capture`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ paypalOrderId: orderId })
       .expect(200);
 
@@ -535,7 +536,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const checkoutRes = await request(app)
       .post(`/api/deals/${setup.dealId}/checkout`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: setup.authorizationToken })
       .expect(201);
 
@@ -547,7 +548,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const res = await request(app)
       .post(`/api/deals/${setup.dealId}/capture`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ paypalOrderId: orderId })
       .expect(200);
 
@@ -561,7 +562,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const checkoutRes = await request(app)
       .post(`/api/deals/${setup.dealId}/checkout`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: setup.authorizationToken })
       .expect(201);
 
@@ -569,7 +570,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     await request(app)
       .post(`/api/deals/${setup.dealId}/cancel-payment`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ paypalOrderId: orderId })
       .expect(200);
 
@@ -583,7 +584,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const checkoutRes = await request(app)
       .post(`/api/deals/${setup.dealId}/checkout`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: setup.authorizationToken })
       .expect(201);
 
@@ -591,13 +592,13 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     await request(app)
       .post(`/api/deals/${setup.dealId}/capture`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ paypalOrderId: orderId })
       .expect(200);
 
     const auditRes = await request(app)
       .get(`/api/deals/${setup.dealId}/audit`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .expect(200);
 
     const types = auditRes.body.data.map((e: any) => e.type);
@@ -611,7 +612,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const checkoutRes = await request(app)
       .post(`/api/deals/${setup.dealId}/checkout`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: setup.authorizationToken })
       .expect(201);
 
@@ -620,14 +621,14 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
     // Complete the payment
     await request(app)
       .post(`/api/deals/${setup.dealId}/capture`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ paypalOrderId: orderId })
       .expect(200);
 
     // Try to checkout again
     const res = await request(app)
       .post(`/api/deals/${setup.dealId}/checkout`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: setup.authorizationToken })
       .expect(400);
 
@@ -641,13 +642,13 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     await request(app)
       .post(`/api/deals/${setup.dealId}/checkout`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: setup.authorizationToken })
       .expect(201);
 
     const res = await request(app)
       .get(`/api/deals/${setup.dealId}/payment`)
-      .set('x-user-id', 'user-mallory')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-mallory', testConfig.TOKEN_HMAC_SECRET))
       .expect(403);
 
     expect(res.body.success).toBe(false);
@@ -705,7 +706,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const res = await request(app)
       .post(`/api/deals/${setup.dealId}/checkout`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: setup.authorizationToken })
       .expect(400);
 
@@ -718,27 +719,27 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
     // Alice creates 2 deals
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', 'user-alice')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-alice', testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: { ...mockIntent, id: 'deal-alice-1' } })
       .expect(201);
 
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', 'user-alice')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-alice', testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: { ...mockIntent, id: 'deal-alice-2' } })
       .expect(201);
 
     // Bob creates 1 deal
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', 'user-bob')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-bob', testConfig.TOKEN_HMAC_SECRET))
       .send({ intent: { ...mockIntent, id: 'deal-bob-1' } })
       .expect(201);
 
     // Alice requests her deals
     const aliceRes = await request(app)
       .get('/api/deals')
-      .set('x-user-id', 'user-alice')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-alice', testConfig.TOKEN_HMAC_SECRET))
       .expect(200);
 
     expect(aliceRes.body.success).toBe(true);
@@ -748,7 +749,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
     // Bob requests his deals
     const bobRes = await request(app)
       .get('/api/deals')
-      .set('x-user-id', 'user-bob')
+      .set('Authorization', 'Bearer ' + createSessionToken('user-bob', testConfig.TOKEN_HMAC_SECRET))
       .expect(200);
 
     expect(bobRes.body.success).toBe(true);
@@ -770,7 +771,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     await request(app)
       .post(`/api/deals/${setup.dealId}/verify`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ finalDeal: modifiedDeal })
       .expect(200);
 
@@ -799,7 +800,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const res = await request(app)
       .post(`/api/deals/${setup.dealId}/checkout`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: setup.authorizationToken })
       .expect(400);
 
@@ -813,7 +814,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const checkoutRes = await request(app)
       .post(`/api/deals/${setup.dealId}/checkout`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: setup.authorizationToken })
       .expect(201);
 
@@ -831,7 +832,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const res = await request(app)
       .post(`/api/deals/${setup.dealId}/capture`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ paypalOrderId: orderId })
       .expect(200);
 
@@ -857,18 +858,18 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
     const inrIntent: UserIntent = { ...mockIntent, id: 'deal-inr-fail', currency: 'INR', maxBudget: 8000 };
     const inrDeal: FinalDeal = { ...mockValidFinalDeal, dealId: 'deal-inr-fail', currency: 'INR', totalPayable: 7500, productPrice: 7500 };
 
-    await request(app).post('/api/deals').set('x-user-id', 'u1').send({ intent: inrIntent, finalDeal: inrDeal });
-    await request(app).post(`/api/deals/${inrIntent.id}/verify`).set('x-user-id', 'u1').expect(200);
-    await request(app).post(`/api/deals/${inrIntent.id}/approval-request`).set('x-user-id', 'u1').expect(201);
+    await request(app).post('/api/deals').set('Authorization', 'Bearer ' + createSessionToken('u1', testConfig.TOKEN_HMAC_SECRET)).send({ intent: inrIntent, finalDeal: inrDeal });
+    await request(app).post(`/api/deals/${inrIntent.id}/verify`).set('Authorization', 'Bearer ' + createSessionToken('u1', testConfig.TOKEN_HMAC_SECRET)).expect(200);
+    await request(app).post(`/api/deals/${inrIntent.id}/approval-request`).set('Authorization', 'Bearer ' + createSessionToken('u1', testConfig.TOKEN_HMAC_SECRET)).expect(201);
 
-    const appRes = await request(app).post(`/api/deals/${inrIntent.id}/approve`).set('x-user-id', 'u1').expect(200);
+    const appRes = await request(app).post(`/api/deals/${inrIntent.id}/approve`).set('Authorization', 'Bearer ' + createSessionToken('u1', testConfig.TOKEN_HMAC_SECRET)).expect(200);
     const authToken = appRes.body.data.authorizationToken;
 
     const initialOrderCount = mockPayPal.orders.size;
 
     const res = await request(app)
       .post(`/api/deals/${inrIntent.id}/checkout`)
-      .set('x-user-id', 'u1')
+      .set('Authorization', 'Bearer ' + createSessionToken('u1', testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: authToken })
       .expect(400);
 
@@ -899,7 +900,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
     const setup = await setupApprovedDeal();
     const checkoutRes = await request(app)
       .post(`/api/deals/${setup.dealId}/checkout`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: setup.authorizationToken })
       .expect(201);
 
@@ -919,7 +920,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const res = await request(app)
       .post(`/api/deals/${setup.dealId}/capture`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ paypalOrderId: orderId })
       .expect(400);
 
@@ -946,7 +947,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
     const setup = await setupApprovedDeal();
     const checkoutRes = await request(app)
       .post(`/api/deals/${setup.dealId}/checkout`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: setup.authorizationToken })
       .expect(201);
 
@@ -965,7 +966,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const captureRes = await request(app)
       .post(`/api/deals/${setup.dealId}/capture`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ paypalOrderId: orderId })
       .expect(400);
 
@@ -980,7 +981,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
     const setup = await setupApprovedDeal();
     const checkoutRes = await request(app)
       .post(`/api/deals/${setup.dealId}/checkout`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: setup.authorizationToken })
       .expect(201);
 
@@ -991,7 +992,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const captureRes = await request(app)
       .post(`/api/deals/${setup.dealId}/capture`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ paypalOrderId: orderId })
       .expect(400);
 
@@ -1031,7 +1032,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
     const setup = await setupApprovedDeal();
     const checkoutRes = await request(app)
       .post(`/api/deals/${setup.dealId}/checkout`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ authorizationToken: setup.authorizationToken })
       .expect(201);
 
@@ -1040,7 +1041,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
 
     const captureRes = await request(app)
       .post(`/api/deals/${setup.dealId}/capture`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .send({ paypalOrderId: checkoutRes.body.data.paypalOrderId })
       .expect(200);
 
@@ -1050,7 +1051,7 @@ describe('Phase 5: PayPal Sandbox Integration & IntentLock-Enforced Checkout', (
     // Verify audit logs contain simulated mock labels
     const auditRes = await request(app)
       .get(`/api/deals/${setup.dealId}/audit`)
-      .set('x-user-id', setup.userId)
+      .set('Authorization', 'Bearer ' + createSessionToken(setup.userId, testConfig.TOKEN_HMAC_SECRET))
       .expect(200);
 
     const orderEvent = auditRes.body.data.find((e: any) => e.type === 'paypal_order_created');

@@ -61,8 +61,8 @@ export const PayPalCheckoutModal: React.FC<PayPalCheckoutModalProps> = ({
 
   // 1. Step 1: Create PayPal Order on Backend
   const handleInitiatePayPalOrder = async () => {
-    if (!isEligible) {
-      setErrorMessage('Checkout is blocked: Deal must be server-verified and human-approved with backend online.');
+    if (!isEligible || !authorizationToken) {
+      setErrorMessage('Checkout is blocked: A mandatory cryptographic authorization token is required from human approval.');
       setStep('ERROR');
       return;
     }

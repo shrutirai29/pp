@@ -5,6 +5,7 @@ import { initDatabase } from '../src/db/database.js';
 import { createApp } from '../src/app.js';
 import { EnvConfig } from '../src/config/env.js';
 import { UserIntent, FinalDeal } from '../src/schemas/dealSchemas.js';
+import { authHeader } from './authTestHelper.js';
 
 const testConfig: EnvConfig = {
   PORT: 4001,
@@ -323,8 +324,8 @@ describe('Phase 4: Server-Enforced IntentLock Gateway & Persistence', () => {
     expect(res.body.error).toContain('Deal was modified after verification report was issued');
   });
 
-  // 15. Deal modification after approval
-  it('15. Deal modification after approval invalidates approval during token consumption', async () => {
+  // 15. Payment completion bypass is disabled (Priority 2)
+  it('15. Legacy consume-authorization endpoint is permanently disabled and rejects bypass attempts with 403', async () => {
     await request(app).post('/api/deals').send({ intent: mockIntent, finalDeal: mockValidFinalDeal });
     await request(app).post(`/api/deals/${mockIntent.id}/verify`);
     await request(app).post(`/api/deals/${mockIntent.id}/approval-request`);
@@ -332,22 +333,20 @@ describe('Phase 4: Server-Enforced IntentLock Gateway & Persistence', () => {
     const approveRes = await request(app).post(`/api/deals/${mockIntent.id}/approve`);
     const token = approveRes.body.data.authorizationToken;
 
-    // Secretly tamper with deal in database
-    db.prepare(`UPDATE deals SET final_deal_json = ? WHERE id = ?`).run(
-      JSON.stringify({ ...mockValidFinalDeal, productPrice: 7500, totalPayable: 7500 }),
-      mockIntent.id
-    );
-
     const consumeRes = await request(app)
       .post(`/api/deals/${mockIntent.id}/consume-authorization`)
       .send({ authorizationToken: token })
-      .expect(400);
+      .expect(403);
 
-    expect(consumeRes.body.error).toContain('Approval invalidated: Deal terms were altered after approval');
+    expect(consumeRes.body.error).toContain('Payment completion bypass is permanently disabled');
+
+    // Confirm deal status remains unchanged (NOT payment_completed)
+    const dealRes = await request(app).get(`/api/deals/${mockIntent.id}`).expect(200);
+    expect(dealRes.body.data.status).not.toBe('payment_completed');
   });
 
-  // 16. Invalid authorization token
-  it('16. Invalid authorization token is rejected with 400', async () => {
+  // 16. Invalid authorization token cannot bypass payment
+  it('16. Any call to consume-authorization is blocked and cannot produce a completed payment', async () => {
     await request(app).post('/api/deals').send({ intent: mockIntent, finalDeal: mockValidFinalDeal });
     await request(app).post(`/api/deals/${mockIntent.id}/verify`);
     await request(app).post(`/api/deals/${mockIntent.id}/approval-request`);
@@ -356,13 +355,13 @@ describe('Phase 4: Server-Enforced IntentLock Gateway & Persistence', () => {
     const res = await request(app)
       .post(`/api/deals/${mockIntent.id}/consume-authorization`)
       .send({ authorizationToken: 'INVALID-FAKE-TOKEN-123' })
-      .expect(400);
+      .expect(403);
 
-    expect(res.body.error).toContain('Invalid authorization token supplied');
+    expect(res.body.error).toContain('Payment completion bypass is permanently disabled');
   });
 
-  // 17. Successful authorization consumption
-  it('17. Successful authorization consumption transitions deal status to payment_completed', async () => {
+  // 17. Authorization-only operation strictly prohibited from completing payment
+  it('17. Authorization-only operation strictly prohibited from creating or completing payments', async () => {
     await request(app).post('/api/deals').send({ intent: mockIntent, finalDeal: mockValidFinalDeal });
     await request(app).post(`/api/deals/${mockIntent.id}/verify`);
     await request(app).post(`/api/deals/${mockIntent.id}/approval-request`);
@@ -370,45 +369,21 @@ describe('Phase 4: Server-Enforced IntentLock Gateway & Persistence', () => {
     const approveRes = await request(app).post(`/api/deals/${mockIntent.id}/approve`);
     const token = approveRes.body.data.authorizationToken;
 
-    const consumeRes = await request(app)
-      .post(`/api/deals/${mockIntent.id}/consume-authorization`)
-      .send({ authorizationToken: token })
-      .expect(200);
-
-    expect(consumeRes.body.success).toBe(true);
-    expect(consumeRes.body.data.status).toBe('PAYMENT_AUTHORIZED_DEMO');
-
-    // Confirm deal status updated in database
-    const dealRes = await request(app).get(`/api/deals/${mockIntent.id}`).expect(200);
-    expect(dealRes.body.data.status).toBe('payment_completed');
-  });
-
-  // 18. Replayed authorization token
-  it('18. Replayed authorization token is strictly rejected (one-time use)', async () => {
-    await request(app).post('/api/deals').send({ intent: mockIntent, finalDeal: mockValidFinalDeal });
-    await request(app).post(`/api/deals/${mockIntent.id}/verify`);
-    await request(app).post(`/api/deals/${mockIntent.id}/approval-request`);
-
-    const approveRes = await request(app).post(`/api/deals/${mockIntent.id}/approve`);
-    const token = approveRes.body.data.authorizationToken;
-
-    // First consumption: 200 OK
     await request(app)
       .post(`/api/deals/${mockIntent.id}/consume-authorization`)
       .send({ authorizationToken: token })
-      .expect(200);
+      .expect(403);
 
-    // Replay attempt: 400 Bad Request (Cannot consume status CONSUMED)
-    const replayRes = await request(app)
-      .post(`/api/deals/${mockIntent.id}/consume-authorization`)
-      .send({ authorizationToken: token })
-      .expect(400);
+    // Verify database record has no completed payment
+    const paymentCheck = db.prepare(`SELECT * FROM payments WHERE deal_id = ?`).all(mockIntent.id);
+    expect(paymentCheck.length).toBe(0);
 
-    expect(replayRes.body.error).toContain('Cannot consume authorization. Current status is CONSUMED');
+    const deal = db.prepare(`SELECT status FROM deals WHERE id = ?`).get(mockIntent.id) as any;
+    expect(deal.status).not.toBe('payment_completed');
   });
 
-  // 19. Concurrent attempts to consume the same token
-  it('19. Concurrent attempts to consume token are guarded atomically', async () => {
+  // 18. Double bypass attempts are also rejected with 403
+  it('18. Repeated bypass attempts are consistently rejected', async () => {
     await request(app).post('/api/deals').send({ intent: mockIntent, finalDeal: mockValidFinalDeal });
     await request(app).post(`/api/deals/${mockIntent.id}/verify`);
     await request(app).post(`/api/deals/${mockIntent.id}/approval-request`);
@@ -416,16 +391,33 @@ describe('Phase 4: Server-Enforced IntentLock Gateway & Persistence', () => {
     const approveRes = await request(app).post(`/api/deals/${mockIntent.id}/approve`);
     const token = approveRes.body.data.authorizationToken;
 
-    // Launch two simultaneous requests
+    await request(app)
+      .post(`/api/deals/${mockIntent.id}/consume-authorization`)
+      .send({ authorizationToken: token })
+      .expect(403);
+
+    await request(app)
+      .post(`/api/deals/${mockIntent.id}/consume-authorization`)
+      .send({ authorizationToken: token })
+      .expect(403);
+  });
+
+  // 19. Concurrent attempts to bypass payment are all rejected with 403
+  it('19. Concurrent attempts to bypass payment are all rejected with 403', async () => {
+    await request(app).post('/api/deals').send({ intent: mockIntent, finalDeal: mockValidFinalDeal });
+    await request(app).post(`/api/deals/${mockIntent.id}/verify`);
+    await request(app).post(`/api/deals/${mockIntent.id}/approval-request`);
+
+    const approveRes = await request(app).post(`/api/deals/${mockIntent.id}/approve`);
+    const token = approveRes.body.data.authorizationToken;
+
     const [res1, res2] = await Promise.all([
       request(app).post(`/api/deals/${mockIntent.id}/consume-authorization`).send({ authorizationToken: token }),
       request(app).post(`/api/deals/${mockIntent.id}/consume-authorization`).send({ authorizationToken: token }),
     ]);
 
-    const statuses = [res1.status, res2.status];
-    // Exactly one must succeed (200) and the other must fail (400 or 409)
-    expect(statuses).toContain(200);
-    expect(statuses.some((s) => s === 400 || s === 409)).toBe(true);
+    expect(res1.status).toBe(403);
+    expect(res2.status).toBe(403);
   });
 
   // 20. Persistence after server restart
@@ -466,17 +458,17 @@ describe('Phase 4: Server-Enforced IntentLock Gateway & Persistence', () => {
 
   // 21. Unauthorized access to another user's deal
   it("21. Unauthorized access to another user's deal is blocked with 403 Forbidden", async () => {
-    // Create deal as user-alice
+    // Create deal as user-alice with valid signed session
     await request(app)
       .post('/api/deals')
-      .set('x-user-id', 'user-alice')
+      .set(authHeader('user-alice'))
       .send({ intent: mockIntent, finalDeal: mockValidFinalDeal })
       .expect(201);
 
-    // Attempt to verify as user-bob
+    // Attempt to verify as user-bob with Bob's valid signed session
     const res = await request(app)
       .post(`/api/deals/${mockIntent.id}/verify`)
-      .set('x-user-id', 'user-bob')
+      .set(authHeader('user-bob'))
       .expect(403);
 
     expect(res.body.error).toContain('Unauthorized access to this deal');

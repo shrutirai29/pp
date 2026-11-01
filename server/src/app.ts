@@ -14,7 +14,7 @@ import { LLMProvider } from './llm/types.js';
 import { createLLMProvider } from './llm/providerFactory.js';
 import { NegotiationCoordinator } from './services/negotiation/negotiationCoordinator.js';
 import { createApiRouter } from './routes/api.js';
-import { authMiddleware } from './middleware/auth.js';
+import { createAuthMiddleware, authMiddleware } from './middleware/auth.js';
 import { rateLimiter } from './middleware/rateLimiter.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
@@ -53,8 +53,8 @@ export function createApp(
   // Global rate limiter
   app.use(rateLimiter(300, 60000));
 
-  // Development auth / identity session
-  app.use(authMiddleware);
+  // Server-verified identity authentication middleware
+  app.use(createAuthMiddleware(config));
 
   // Repositories
   const dealRepo = new DealRepository(db);

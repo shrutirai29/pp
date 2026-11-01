@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import crypto from 'node:crypto';
+import { createSessionToken } from '../services/authService.js';
 import { DealRepository } from '../repositories/dealRepository.js';
 import { VerificationRepository } from '../repositories/verificationRepository.js';
 import { ApprovalRepository } from '../repositories/approvalRepository.js';
@@ -48,6 +49,61 @@ export function createApiRouter(
         clientId: config.PAYPAL_CLIENT_ID || 'sb',
         env: config.PAYPAL_ENV || 'sandbox',
         currency: 'USD',
+      },
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 0.05 POST /api/auth/session & /api/auth/dev-session - Mint Verified Session Token
+  // ---------------------------------------------------------------------------
+  router.post('/auth/session', (req: Request, res: Response) => {
+    if (config.NODE_ENV === 'production') {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden: Direct anonymous session generation is disabled in production.',
+      });
+    }
+
+    const requestedUserId = req.body?.userId;
+    const userId = typeof requestedUserId === 'string' && requestedUserId.trim().length > 0
+      ? requestedUserId.trim()
+      : `usr_${crypto.randomBytes(4).toString('hex')}`;
+
+    const token = createSessionToken(userId, config.TOKEN_HMAC_SECRET, 86400);
+
+    res.json({
+      success: true,
+      data: {
+        token,
+        userId,
+        expiresInSeconds: 86400,
+        mode: config.NODE_ENV,
+      },
+    });
+  });
+
+  router.post('/auth/dev-session', (req: Request, res: Response) => {
+    if (config.NODE_ENV === 'production') {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden: Development session generation is disabled in production.',
+      });
+    }
+
+    const requestedUserId = req.body?.userId;
+    const userId = typeof requestedUserId === 'string' && requestedUserId.trim().length > 0
+      ? requestedUserId.trim()
+      : 'dev-user-default';
+
+    const token = createSessionToken(userId, config.TOKEN_HMAC_SECRET, 86400);
+
+    res.json({
+      success: true,
+      data: {
+        token,
+        userId,
+        expiresInSeconds: 86400,
+        mode: config.NODE_ENV,
       },
     });
   });
@@ -530,102 +586,13 @@ export function createApiRouter(
   });
 
   // ---------------------------------------------------------------------------
-  // 7. POST /api/deals/:id/consume-authorization - Atomic One-Time Consumption
+  // 7. POST /api/deals/:id/consume-authorization - Legacy Bypass Disabled (Priority 2)
   // ---------------------------------------------------------------------------
-  router.post('/deals/:id/consume-authorization', (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const parsed = ConsumeAuthorizationPayloadSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ success: false, error: 'Invalid payload: authorizationToken is required.' });
-      }
-
-      const { authorizationToken } = parsed.data;
-
-      const deal = dealRepo.getDeal(req.params.id);
-      if (!deal) return res.status(404).json({ success: false, error: 'Deal not found' });
-
-      const userId = req.user?.id || 'dev-user-default';
-      if (deal.userId !== userId) {
-        return res.status(403).json({ success: false, error: "Unauthorized: Deal belongs to another user." });
-      }
-
-      const approval = approvalRepo.getLatestApprovalForDeal(deal.id);
-      if (!approval) {
-        return res.status(400).json({ success: false, error: 'No approval record found.' });
-      }
-
-      // Check current approval status
-      if (approval.status !== 'APPROVED') {
-        return res.status(400).json({
-          success: false,
-          error: `Cannot consume authorization. Current status is ${approval.status}.`,
-        });
-      }
-
-      // Check expiration
-      if (new Date() > new Date(approval.expiresAt)) {
-        approvalRepo.updateToExpired(approval.id);
-        return res.status(400).json({
-          success: false,
-          error: 'Authorization token has expired. Re-verification required.',
-        });
-      }
-
-      // Validate token hash
-      const submittedHash = hashAuthorizationToken(authorizationToken, config.TOKEN_HMAC_SECRET);
-      if (submittedHash !== approval.tokenHash) {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid authorization token supplied.',
-        });
-      }
-
-      // Check for tampering between approval and consumption
-      if (!deal.finalDeal) {
-        return res.status(400).json({ success: false, error: 'Missing contract terms.' });
-      }
-
-      const currentFingerprint = generateServerDealFingerprint(deal.finalDeal);
-      if (currentFingerprint !== approval.fingerprint) {
-        approvalRepo.updateToInvalidated(approval.id, 'Terms were modified prior to authorization consumption.');
-        return res.status(400).json({
-          success: false,
-          error: 'Approval invalidated: Deal terms were altered after approval.',
-        });
-      }
-
-      // ATOMIC CONSUMPTION: Database update ensures concurrent requests fail if status != 'APPROVED'
-      const consumed = approvalRepo.atomicConsumeApproval(approval.id);
-      if (!consumed) {
-        return res.status(409).json({
-          success: false,
-          error: 'Authorization token was already consumed or altered concurrently.',
-        });
-      }
-
-      dealRepo.updateDealStatus(deal.id, 'payment_completed');
-
-      auditRepo.recordEvent(
-        deal.id,
-        'checkout_attempted',
-        'Authorization Token Consumed at Gateway',
-        'One-time authorization token validated and consumed. Demonstration transaction completed.',
-        'checkout_gateway',
-        { approvalId: approval.id, fingerprint: currentFingerprint }
-      );
-
-      res.json({
-        success: true,
-        data: {
-          dealId: deal.id,
-          status: 'PAYMENT_AUTHORIZED_DEMO',
-          message: 'Demonstration payment authorization succeeded. Token has been consumed and cannot be reused.',
-          fingerprint: currentFingerprint,
-        },
-      });
-    } catch (err) {
-      next(err);
-    }
+  router.post('/deals/:id/consume-authorization', (_req: Request, res: Response) => {
+    return res.status(403).json({
+      success: false,
+      error: 'Payment completion bypass is permanently disabled. Authorization-only endpoints cannot complete payment or mark deals as payment_completed. Payments must be verified and captured via PayPal Sandbox gateway at /api/deals/:id/capture.',
+    });
   });
 
   // ---------------------------------------------------------------------------
