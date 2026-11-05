@@ -17,7 +17,9 @@ import {
   Truck,
   Building2,
   Key,
-  ExternalLink
+  ExternalLink,
+  RefreshCw,
+  Clock
 } from 'lucide-react';
 
 interface PayPalCheckoutModalProps {
@@ -36,6 +38,9 @@ export type CheckoutStep =
   | 'CREATING_ORDER'
   | 'AWAITING_APPROVAL'
   | 'CAPTURING'
+  | 'RECONCILING'
+  | 'PENDING_CONFIRMATION'
+  | 'REQUIRES_RECONCILIATION'
   | 'SUCCESS'
   | 'ERROR'
   | 'CANCELLED';
@@ -52,6 +57,7 @@ export const PayPalCheckoutModal: React.FC<PayPalCheckoutModalProps> = ({
 }) => {
   const [step, setStep] = useState<CheckoutStep>('READY');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [reconciliationMessage, setReconciliationMessage] = useState<string | null>(null);
   const [orderData, setOrderData] = useState<PayPalCheckoutResponse | null>(null);
   const [captureData, setCaptureData] = useState<PayPalCaptureResponse | null>(null);
 
@@ -61,7 +67,7 @@ export const PayPalCheckoutModal: React.FC<PayPalCheckoutModalProps> = ({
 
   // 1. Step 1: Create PayPal Order on Backend
   const handleInitiatePayPalOrder = async () => {
-    if (!isEligible || !authorizationToken) {
+    if (!isEligible || !authorizationToken || authorizationToken.trim().length === 0) {
       setErrorMessage('Checkout is blocked: A mandatory cryptographic authorization token is required from human approval.');
       setStep('ERROR');
       return;
@@ -106,11 +112,69 @@ export const PayPalCheckoutModal: React.FC<PayPalCheckoutModalProps> = ({
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Server capture failed';
       setErrorMessage(msg);
-      setStep('ERROR');
+      if (
+        msg.toLowerCase().includes('reconciliation') ||
+        msg.toLowerCase().includes('network') ||
+        msg.toLowerCase().includes('timeout')
+      ) {
+        setReconciliationMessage('Payment status requires verification: A network or capture interruption occurred.');
+        setStep('REQUIRES_RECONCILIATION');
+      } else {
+        setStep('ERROR');
+      }
     }
   };
 
-  // 3. Buyer Cancels
+  // 3. Step 3: Dedicated Safe Reconciliation (Queries order state without capturing)
+  const handleReconcile = async () => {
+    if (step === 'RECONCILING') return;
+    setStep('RECONCILING');
+    setErrorMessage(null);
+
+    try {
+      const res = await dealmindApi.reconcilePayment(deal.dealId);
+      if (res.success && res.data) {
+        const data = res.data;
+        if (data.status === 'COMPLETED') {
+          const capResult: PayPalCaptureResponse = {
+            success: true,
+            paymentId: data.paypalOrderId,
+            status: 'COMPLETED',
+            paypalOrderId: data.paypalOrderId,
+            captureId: data.captureId,
+            amount: data.amount || deal.totalPayable,
+            currency: data.currency || deal.currency,
+            payerEmail: data.payerEmail,
+            message: data.message,
+            isSimulated: data.isSimulated,
+            gatewayMode: data.gatewayMode,
+          };
+          setCaptureData(capResult);
+          setStep('SUCCESS');
+          if (onPaymentSuccess) {
+            onPaymentSuccess(capResult);
+          }
+        } else if (data.status === 'PENDING') {
+          setReconciliationMessage(data.message || 'PayPal order authorization or capture is currently pending.');
+          setStep('PENDING_CONFIRMATION');
+        } else if (data.status === 'FAILED') {
+          setErrorMessage(data.message || 'PayPal reported terminal order failure.');
+          setStep('ERROR');
+        } else {
+          setReconciliationMessage(data.message || 'Payment status requires verification.');
+          setStep('REQUIRES_RECONCILIATION');
+        }
+      } else {
+        throw new Error('Reconciliation response did not contain verification data.');
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unable to reconcile payment status with PayPal. Please retry.';
+      setErrorMessage(msg);
+      setStep('REQUIRES_RECONCILIATION');
+    }
+  };
+
+  // 4. Buyer Cancels
   const handleCancelCheckout = async () => {
     if (orderData) {
       try {
@@ -243,7 +307,7 @@ export const PayPalCheckoutModal: React.FC<PayPalCheckoutModalProps> = ({
               </p>
             </div>
 
-            {/* Simulated Official PayPal Sandbox Button */}
+            {/* PayPal Sandbox Button */}
             <div className="space-y-2 pt-1">
               <button
                 onClick={handleInitiatePayPalOrder}
@@ -369,6 +433,97 @@ export const PayPalCheckoutModal: React.FC<PayPalCheckoutModalProps> = ({
           </div>
         )}
 
+        {/* Step: Reconciling */}
+        {step === 'RECONCILING' && (
+          <div className="rounded-xl border border-blue-500/50 bg-navy-950/90 p-8 text-center space-y-3">
+            <Loader2 className="h-8 w-8 text-blue-400 animate-spin mx-auto" />
+            <h4 className="text-sm font-semibold text-white">Reconciling with PayPal...</h4>
+            <p className="text-xs text-slate-300">
+              Querying PayPal order status directly without initiating a second capture.
+            </p>
+          </div>
+        )}
+
+        {/* Step: Requires Reconciliation */}
+        {step === 'REQUIRES_RECONCILIATION' && (
+          <div className="rounded-xl border border-amber-500/60 bg-amber-950/30 p-5 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/40">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-amber-200">Payment status requires verification</h4>
+                <p className="text-xs text-amber-300/90 leading-relaxed">
+                  {errorMessage || reconciliationMessage || 'A network interruption or status discrepancy occurred. IntentLock can safely verify order status directly against PayPal.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-lg bg-navy-950/80 border border-amber-900/50 text-xs text-slate-300 space-y-1">
+              <p className="font-semibold text-white">Safe Verification Protocol:</p>
+              <p className="text-[11px] text-slate-400">
+                Reconciliation probes PayPal order status directly. It never initiates a duplicate payment capture.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 pt-1">
+              <Button
+                variant="primary"
+                size="md"
+                onClick={handleReconcile}
+                leftIcon={<RefreshCw className="h-4 w-4" />}
+                className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold"
+              >
+                Reconcile Payment Status
+              </Button>
+              <Button variant="ghost" size="md" onClick={onClose}>
+                Close
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Step: Pending Confirmation */}
+        {step === 'PENDING_CONFIRMATION' && (
+          <div className="rounded-xl border border-blue-500/50 bg-blue-950/20 p-5 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/40">
+                <Clock className="h-6 w-6" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-blue-200">Payment Authorization Pending</h4>
+                <p className="text-xs text-blue-300/90 leading-relaxed">
+                  {reconciliationMessage || 'PayPal order exists, but buyer confirmation is still pending.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 pt-1">
+              <Button
+                variant="primary"
+                size="md"
+                onClick={handleReconcile}
+                leftIcon={<RefreshCw className="h-4 w-4" />}
+                className="w-full"
+              >
+                Re-check / Reconcile Status
+              </Button>
+              {orderData && (
+                <Button
+                  variant="outline"
+                  size="md"
+                  onClick={handleApproveAndCapture}
+                >
+                  Capture Now
+                </Button>
+              )}
+              <Button variant="ghost" size="md" onClick={onClose}>
+                Close
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Step: Confirmed Success */}
         {step === 'SUCCESS' && captureData && (
           <div className="rounded-xl border border-emerald-500/50 bg-emerald-950/20 p-5 space-y-4">
@@ -459,6 +614,16 @@ export const PayPalCheckoutModal: React.FC<PayPalCheckoutModalProps> = ({
               >
                 Retry Checkout
               </Button>
+              {orderData && (
+                <Button
+                  variant="outline"
+                  size="md"
+                  onClick={handleReconcile}
+                  leftIcon={<RefreshCw className="h-4 w-4" />}
+                >
+                  Reconcile Status
+                </Button>
+              )}
               <Button variant="ghost" size="md" onClick={onClose}>
                 Close
               </Button>

@@ -16,11 +16,66 @@ export class DealRepository {
   constructor(private db: DatabaseSync) {}
 
   public createDeal(userId: string, intent: UserIntent, finalDeal?: FinalDeal, title?: string): DealRecord {
+    return this.upsertDeal(userId, intent, finalDeal, title);
+  }
+
+  /**
+   * Idempotently creates or updates a deal record.
+   * - Preserves user ownership (rejects cross-user overwrite).
+   * - Never resets advanced status (e.g., payment_completed, verified) back to draft.
+   * - Preserves createdAt timestamp and authoritative payment/security state.
+   */
+  public upsertDeal(userId: string, intent: UserIntent, finalDeal?: FinalDeal, title?: string): DealRecord {
     const id = intent.id;
     const now = new Date().toISOString();
     const dealTitle = title || intent.productTitle;
-    const status = finalDeal ? (finalDeal.isAcceptedBySeller ? 'negotiating' : 'draft') : 'draft';
 
+    const existing = this.getDeal(id);
+    if (existing) {
+      // 1. Strict tenancy check: prevent one user from overwriting another user's deal
+      if (existing.userId !== userId) {
+        throw new Error('Unauthorized: Cannot overwrite deal belonging to another user.');
+      }
+
+      // 2. Status preservation: do not downgrade verified or payment_completed deals
+      let resolvedStatus = existing.status;
+      if (existing.status === 'draft' && finalDeal?.isAcceptedBySeller) {
+        resolvedStatus = 'negotiating';
+      }
+
+      // 3. FinalDeal preservation: keep existing terms if none supplied
+      const resolvedFinalDeal = finalDeal !== undefined ? finalDeal : existing.finalDeal;
+      const updatedTitle = title || existing.title;
+
+      const stmt = this.db.prepare(`
+        UPDATE deals
+        SET title = ?, status = ?, intent_json = ?, final_deal_json = ?, updated_at = ?
+        WHERE id = ?
+      `);
+
+      stmt.run(
+        updatedTitle,
+        resolvedStatus,
+        JSON.stringify(intent),
+        resolvedFinalDeal ? JSON.stringify(resolvedFinalDeal) : null,
+        now,
+        id
+      );
+
+      return {
+        id,
+        userId: existing.userId,
+        title: updatedTitle,
+        status: resolvedStatus,
+        intent,
+        finalDeal: resolvedFinalDeal,
+        createdAt: existing.createdAt,
+        updatedAt: now,
+      };
+    }
+
+    // New deal creation
+    const status = finalDeal ? (finalDeal.isAcceptedBySeller ? 'negotiating' : 'draft') : 'draft';
     const stmt = this.db.prepare(`
       INSERT INTO deals (id, user_id, title, status, intent_json, final_deal_json, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)

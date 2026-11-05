@@ -105,4 +105,5 @@ export interface NegotiationResult {
   summary: string;
   engineMode?: 'live_llm' | 'mock_llm' | 'deterministic_fallback';
   providerName?: string;
+  modelName?: string;
 }

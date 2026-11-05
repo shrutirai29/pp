@@ -209,6 +209,9 @@ export function createApiRouter(
         data: deal,
       });
     } catch (err) {
+      if (err instanceof Error && err.message.includes('Unauthorized')) {
+        return res.status(403).json({ success: false, error: err.message });
+      }
       next(err);
     }
   });
@@ -225,6 +228,9 @@ export function createApiRouter(
         data: deals,
       });
     } catch (err) {
+      if (err instanceof Error && err.message.includes('Unauthorized')) {
+        return res.status(403).json({ success: false, error: err.message });
+      }
       next(err);
     }
   });
@@ -265,6 +271,9 @@ export function createApiRouter(
         },
       });
     } catch (err) {
+      if (err instanceof Error && err.message.includes('Unauthorized')) {
+        return res.status(403).json({ success: false, error: err.message });
+      }
       next(err);
     }
   });
@@ -373,6 +382,9 @@ export function createApiRouter(
         data: report,
       });
     } catch (err) {
+      if (err instanceof Error && err.message.includes('Unauthorized')) {
+        return res.status(403).json({ success: false, error: err.message });
+      }
       next(err);
     }
   });
@@ -445,6 +457,9 @@ export function createApiRouter(
         data: approval,
       });
     } catch (err) {
+      if (err instanceof Error && err.message.includes('Unauthorized')) {
+        return res.status(403).json({ success: false, error: err.message });
+      }
       next(err);
     }
   });
@@ -543,6 +558,9 @@ export function createApiRouter(
         },
       });
     } catch (err) {
+      if (err instanceof Error && err.message.includes('Unauthorized')) {
+        return res.status(403).json({ success: false, error: err.message });
+      }
       next(err);
     }
   });
@@ -581,6 +599,9 @@ export function createApiRouter(
         message: 'Deal explicitly declined.',
       });
     } catch (err) {
+      if (err instanceof Error && err.message.includes('Unauthorized')) {
+        return res.status(403).json({ success: false, error: err.message });
+      }
       next(err);
     }
   });
@@ -724,6 +745,35 @@ export function createApiRouter(
   });
 
   // ---------------------------------------------------------------------------
+  // 11.5. POST /api/deals/:id/reconcile - Dedicated Safe Payment Reconciliation
+  // ---------------------------------------------------------------------------
+  router.post('/deals/:id/reconcile', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.user?.id || 'dev-user-default';
+      const result = await paymentService.reconcilePayment({
+        dealId: req.params.id,
+        userId,
+      });
+
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (err) {
+      if (err instanceof PaymentSecurityError) {
+        return res.status(err.statusCode).json({
+          success: false,
+          error: err.message,
+        });
+      }
+      if (err instanceof Error && err.message.includes('Unauthorized')) {
+        return res.status(403).json({ success: false, error: err.message });
+      }
+      next(err);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
   // 11b. POST /api/deals/:id/negotiate - Run Server-Coordinated LLM Negotiation
   // ---------------------------------------------------------------------------
   router.post('/deals/:id/negotiate', async (req: Request, res: Response, next: NextFunction) => {
@@ -782,6 +832,9 @@ export function createApiRouter(
         data: result,
       });
     } catch (err) {
+      if (err instanceof Error && err.message.includes('Unauthorized')) {
+        return res.status(403).json({ success: false, error: err.message });
+      }
       next(err);
     }
   });
@@ -807,6 +860,9 @@ export function createApiRouter(
         data: latestNeg,
       });
     } catch (err) {
+      if (err instanceof Error && err.message.includes('Unauthorized')) {
+        return res.status(403).json({ success: false, error: err.message });
+      }
       next(err);
     }
   });
@@ -831,6 +887,9 @@ export function createApiRouter(
         data: neg,
       });
     } catch (err) {
+      if (err instanceof Error && err.message.includes('Unauthorized')) {
+        return res.status(403).json({ success: false, error: err.message });
+      }
       next(err);
     }
   });
@@ -858,6 +917,9 @@ export function createApiRouter(
         data: ranked,
       });
     } catch (err) {
+      if (err instanceof Error && err.message.includes('Unauthorized')) {
+        return res.status(403).json({ success: false, error: err.message });
+      }
       next(err);
     }
   });
@@ -882,6 +944,9 @@ export function createApiRouter(
         data: events,
       });
     } catch (err) {
+      if (err instanceof Error && err.message.includes('Unauthorized')) {
+        return res.status(403).json({ success: false, error: err.message });
+      }
       next(err);
     }
   });

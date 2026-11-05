@@ -24,6 +24,7 @@ interface NegotiationTimelineProps {
   session: NegotiationSession;
   engineMode?: 'live_llm' | 'mock_llm' | 'deterministic_fallback';
   providerName?: string;
+  modelName?: string;
   fallbackReason?: string;
   isNegotiating?: boolean;
   onProceedToVerification: () => void;
@@ -35,6 +36,7 @@ export const NegotiationTimeline: React.FC<NegotiationTimelineProps> = ({
   session,
   engineMode,
   providerName,
+  modelName,
   fallbackReason,
   isNegotiating,
   onProceedToVerification,
@@ -82,7 +84,7 @@ export const NegotiationTimeline: React.FC<NegotiationTimelineProps> = ({
               {engineMode === 'live_llm' ? (
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 border border-emerald-500/60 text-emerald-300 font-bold flex items-center gap-1">
                   <Sparkles className="h-3 w-3 text-emerald-400 animate-pulse" />
-                  LIVE GROQ ({providerName || 'llama-3.3-70b-versatile'})
+                  LIVE GROQ ({modelName || (providerName === 'groq' ? 'llama-3.3-70b-versatile' : modelName || providerName || 'llama-3.3-70b-versatile')})
                 </span>
               ) : engineMode === 'mock_llm' ? (
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950/80 border border-amber-600/60 text-amber-300 font-medium flex items-center gap-1">

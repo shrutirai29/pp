@@ -117,6 +117,20 @@ export interface PayPalCaptureResponse {
   gatewayMode?: 'live_sandbox' | 'mock_sandbox';
 }
 
+export interface PayPalReconciliationResponse {
+  status: 'COMPLETED' | 'PENDING' | 'FAILED' | 'REQUIRES_RECONCILIATION';
+  paymentStatus: string;
+  dealStatus?: string;
+  paypalOrderId: string;
+  captureId?: string;
+  amount?: number;
+  currency?: string;
+  payerEmail?: string;
+  message: string;
+  isSimulated?: boolean;
+  gatewayMode?: 'live_sandbox' | 'mock_sandbox';
+}
+
 export interface StoredPaymentInfo {
   id: string;
   dealId: string;
@@ -176,13 +190,17 @@ export const dealmindApi = {
     dealId: string,
     finalDeal?: FinalDeal
   ): Promise<{ success: boolean; report: VerificationReport }> {
-    return request<{ success: boolean; report: VerificationReport }>(
+    const raw = await request<{ success: boolean; data?: VerificationReport; report?: VerificationReport }>(
       `/api/deals/${encodeURIComponent(dealId)}/verify`,
       {
         method: 'POST',
         body: JSON.stringify({ finalDeal }),
       }
     );
+    return {
+      success: raw.success,
+      report: (raw.data || raw.report) as VerificationReport,
+    };
   },
 
   /**
@@ -192,25 +210,42 @@ export const dealmindApi = {
     dealId: string,
     reportId?: string
   ): Promise<{ success: boolean; approval: UserApprovalRecord }> {
-    return request<{ success: boolean; approval: UserApprovalRecord }>(
+    const raw = await request<{ success: boolean; data?: UserApprovalRecord; approval?: UserApprovalRecord }>(
       `/api/deals/${encodeURIComponent(dealId)}/approval-request`,
       {
         method: 'POST',
         body: JSON.stringify({ reportId }),
       }
     );
+    return {
+      success: raw.success,
+      approval: (raw.data || raw.approval) as UserApprovalRecord,
+    };
   },
 
   /**
    * User explicitly approves deal on the server.
    * Backend validates the fingerprint against finalDeal and issues a cryptographically-signed authorization token.
+   * Consistently normalizes response so authorizationToken and approval are top-level.
    */
   async approveDeal(
     dealId: string,
     approvalId: string,
     finalDeal: FinalDeal
   ): Promise<{ success: boolean; authorizationToken: string; approval: UserApprovalRecord }> {
-    return request<{ success: boolean; authorizationToken: string; approval: UserApprovalRecord }>(
+    const raw = await request<{
+      success: boolean;
+      data?: {
+        approvalId: string;
+        status: string;
+        authorizationToken: string;
+        expiresAt: string;
+        dealFingerprint: string;
+        message?: string;
+      };
+      authorizationToken?: string;
+      approval?: UserApprovalRecord;
+    }>(
       `/api/deals/${encodeURIComponent(dealId)}/approve`,
       {
         method: 'POST',
@@ -220,6 +255,24 @@ export const dealmindApi = {
         }),
       }
     );
+
+    const token = raw.data?.authorizationToken || raw.authorizationToken || '';
+    const approvalRecord: UserApprovalRecord = (raw.approval || {
+      approvalId: raw.data?.approvalId || approvalId,
+      dealId,
+      reportId: `rep-${dealId}`,
+      dealFingerprint: raw.data?.dealFingerprint || finalDeal.dealId,
+      status: (raw.data?.status as any) || 'APPROVED',
+      createdAt: new Date().toISOString(),
+      expiresAt: raw.data?.expiresAt || new Date(Date.now() + 900000).toISOString(),
+      approvedAt: new Date().toISOString(),
+    }) as UserApprovalRecord;
+
+    return {
+      success: raw.success,
+      authorizationToken: token,
+      approval: approvalRecord,
+    };
   },
 
   /**
@@ -229,13 +282,26 @@ export const dealmindApi = {
     dealId: string,
     approvalId: string
   ): Promise<{ success: boolean; approval: UserApprovalRecord }> {
-    return request<{ success: boolean; approval: UserApprovalRecord }>(
+    const raw = await request<{ success: boolean; data?: any; approval?: UserApprovalRecord; message?: string }>(
       `/api/deals/${encodeURIComponent(dealId)}/decline`,
       {
         method: 'POST',
         body: JSON.stringify({ approvalId }),
       }
     );
+    const approvalRecord: UserApprovalRecord = (raw.approval || raw.data || {
+      approvalId,
+      dealId,
+      reportId: `rep-${dealId}`,
+      dealFingerprint: '',
+      status: 'DECLINED',
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date().toISOString(),
+    }) as UserApprovalRecord;
+    return {
+      success: raw.success,
+      approval: approvalRecord,
+    };
   },
 
   /**
@@ -329,6 +395,24 @@ export const dealmindApi = {
     return request<{ success: boolean; data: StoredPaymentInfo | null }>(
       `/api/deals/${encodeURIComponent(dealId)}/payment`
     );
+  },
+
+  /**
+   * Reconcile payment status against PayPal order state without triggering a second capture
+   */
+  async reconcilePayment(
+    dealId: string
+  ): Promise<{ success: boolean; data: PayPalReconciliationResponse }> {
+    const raw = await request<{ success: boolean; data: PayPalReconciliationResponse }>(
+      `/api/deals/${encodeURIComponent(dealId)}/reconcile`,
+      {
+        method: 'POST',
+      }
+    );
+    return {
+      success: raw.success,
+      data: raw.data,
+    };
   },
 
   /**

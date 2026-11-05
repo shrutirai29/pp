@@ -305,6 +305,7 @@ export function App() {
       neg = runIntelligentNegotiation(activeIntent, offer, offers);
       neg.engineMode = 'deterministic_fallback';
       neg.providerName = 'Local Rule-Based Heuristic Policy';
+      neg.modelName = 'rule-based-heuristics';
       setNegotiationFallbackReason(fallbackMsg || 'Backend offline / local fallback mode active');
     }
 
@@ -382,6 +383,7 @@ export function App() {
       neg = runIntelligentNegotiation(activeIntent, selectedOffer, offers);
       neg.engineMode = 'deterministic_fallback';
       neg.providerName = 'Local Rule-Based Heuristic Policy';
+      neg.modelName = 'rule-based-heuristics';
       setNegotiationFallbackReason(fallbackMsg || 'Backend offline / local fallback mode active');
     }
 
@@ -518,17 +520,19 @@ export function App() {
       let updatedApproval: UserApprovalRecord;
 
       if (isServerOnline) {
-        try {
-          const res = await dealmindApi.approveDeal(activeIntent.id, approvalRecord.approvalId, finalDeal);
-          token = res.authorizationToken;
-          updatedApproval = res.approval;
-        } catch (serverErr) {
-          throw serverErr;
+        const res = await dealmindApi.approveDeal(activeIntent.id, approvalRecord.approvalId, finalDeal);
+        token = res.authorizationToken || (res as any).data?.authorizationToken;
+        updatedApproval = res.approval || (res as any).data;
+        if (!token || typeof token !== 'string' || token.trim().length === 0) {
+          throw new Error('Server approval completed but failed to issue a valid authorization token.');
         }
       } else {
         const result = ApprovalManager.approveDeal(approvalRecord, finalDeal);
         token = result.authorizationToken;
         updatedApproval = result.approval;
+        if (!token) {
+          throw new Error('Local approval gate failed to generate authorization token.');
+        }
       }
 
       setApprovalRecord(updatedApproval);
@@ -538,10 +542,10 @@ export function App() {
         dealId: activeIntent.id,
         type: 'approval_granted',
         title: `Human Purchase Approval Granted (${isServerOnline ? 'Server-Enforced Token' : 'Local Token'})`,
-        description: `User authorized transaction. Single-use token issued: ${token}`,
+        description: `User authorized transaction. Single-use token issued: ${token.slice(0, 12)}...`,
         actor: 'user',
         metadata: {
-          token,
+          token: `${token.slice(0, 10)}...${token.slice(-6)}`,
           fingerprint: approvalRecord.dealFingerprint,
         },
       });
@@ -553,6 +557,7 @@ export function App() {
         description: err instanceof Error ? err.message : 'Approval failed',
         actor: 'intentlock_engine',
       });
+      throw err;
     }
   };
 
@@ -677,6 +682,7 @@ export function App() {
             offer={selectedOffer}
             engineMode={negotiationResult?.engineMode}
             providerName={negotiationResult?.providerName}
+            modelName={negotiationResult?.modelName}
             fallbackReason={negotiationFallbackReason}
             isNegotiating={isNegotiating}
             onProceedToVerification={handleProceedToVerification}

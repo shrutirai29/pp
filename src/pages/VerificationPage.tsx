@@ -9,7 +9,7 @@ interface VerificationPageProps {
   intent: UserIntent;
   deal?: FinalDeal;
   approvalRecord?: UserApprovalRecord | null;
-  onApprove?: () => void;
+  onApprove?: () => Promise<void> | void;
   onDecline?: () => void;
   authorizationToken?: string;
   isServerOnline?: boolean;

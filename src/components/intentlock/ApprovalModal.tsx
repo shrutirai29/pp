@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { UserApprovalRecord, VerificationReport } from '../../types/verification';
 import { FinalDeal } from '../../types/negotiation';
 import { formatCurrency } from '../../lib/currency';
@@ -12,18 +12,21 @@ import {
   XCircle, 
   AlertTriangle,
   Lock,
-  ArrowRight
+  ArrowRight,
+  Loader2
 } from 'lucide-react';
 
 interface ApprovalModalProps {
   report: VerificationReport;
   deal: FinalDeal;
   approvalRecord: UserApprovalRecord | null;
-  onApprove: () => void;
+  onApprove: () => Promise<void> | void;
   onDecline: () => void;
   onCancel: () => void;
   onProceedToCheckout?: () => void;
   authorizationToken?: string;
+  isLoading?: boolean;
+  error?: string | null;
 }
 
 export const ApprovalModal: React.FC<ApprovalModalProps> = ({
@@ -35,11 +38,33 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
   onCancel,
   onProceedToCheckout,
   authorizationToken,
+  isLoading = false,
+  error = null,
 }) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   const isApproved = approvalRecord?.status === 'APPROVED';
   const isDeclined = approvalRecord?.status === 'DECLINED';
   const isExpired = approvalRecord?.status === 'EXPIRED';
   const isInvalidated = approvalRecord?.status === 'INVALIDATED';
+
+  const isBusy = isLoading || isSubmitting;
+  const activeError = error || submitError;
+
+  const handleApproveClick = async () => {
+    if (isBusy || isApproved) return;
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      await onApprove();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Approval failed. Please check terms and retry.';
+      setSubmitError(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/80 backdrop-blur-sm animate-in fade-in duration-200">
@@ -109,6 +134,17 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
           </div>
         )}
 
+        {/* Active Error Feedback */}
+        {activeError && (
+          <div className="rounded-xl bg-rose-950/40 border border-rose-700/60 p-4 text-xs text-rose-300 flex items-start gap-2.5 animate-in fade-in">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-rose-400 mt-0.5" />
+            <div className="space-y-1">
+              <span className="font-semibold block text-rose-200">Approval Failed</span>
+              <p className="text-rose-300/90 leading-relaxed">{activeError}</p>
+            </div>
+          </div>
+        )}
+
         {/* Status Feedback */}
         {isApproved && (
           <div className="rounded-xl bg-emerald-950/30 border border-emerald-700/50 p-4 text-xs space-y-2">
@@ -120,8 +156,15 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
               One-time demonstration payment authorization token issued. Single-use and bound strictly to this contract fingerprint.
             </p>
             {authorizationToken && (
-              <div className="rounded bg-navy-950 p-2 font-mono text-[11px] text-emerald-300 border border-navy-800 break-all">
-                Token: {authorizationToken}
+              <div className="rounded bg-navy-950 p-2.5 font-mono text-[11px] text-emerald-300 border border-navy-800 flex items-center justify-between">
+                <span>
+                  Token: {authorizationToken.length > 20
+                    ? `${authorizationToken.slice(0, 10)}...${authorizationToken.slice(-6)}`
+                    : authorizationToken}
+                </span>
+                <span className="text-[10px] text-emerald-400 font-sans font-medium bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800/60">
+                  Signed & Valid
+                </span>
               </div>
             )}
           </div>
@@ -149,25 +192,26 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
 
         {/* Buttons */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-navy-800">
-          <Button variant="ghost" size="sm" onClick={onCancel}>
+          <Button variant="ghost" size="sm" onClick={onCancel} disabled={isBusy}>
             Close
           </Button>
 
           {!isApproved && !isDeclined && (
             <div className="flex items-center gap-3 w-full sm:w-auto">
-              <Button variant="outline" size="md" onClick={onDecline} className="w-full sm:w-auto">
+              <Button variant="outline" size="md" onClick={onDecline} disabled={isBusy} className="w-full sm:w-auto">
                 Decline Deal
               </Button>
 
               <Button
                 variant="primary"
                 size="md"
-                onClick={onApprove}
-                leftIcon={<Lock className="h-4 w-4" />}
-                rightIcon={<ArrowRight className="h-4 w-4" />}
-                className="w-full sm:w-auto bg-gradient-to-r from-electric-500 to-violet-600 font-semibold"
+                onClick={handleApproveClick}
+                disabled={isBusy}
+                leftIcon={isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
+                rightIcon={!isBusy ? <ArrowRight className="h-4 w-4" /> : undefined}
+                className="w-full sm:w-auto bg-gradient-to-r from-electric-500 to-violet-600 font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Authorize & Approve
+                {isBusy ? 'Authorizing & Signing...' : 'Authorize & Approve'}
               </Button>
             </div>
           )}

@@ -16,6 +16,20 @@ export class PaymentSecurityError extends Error {
   }
 }
 
+export interface ReconcilePaymentResult {
+  status: 'COMPLETED' | 'PENDING' | 'FAILED' | 'REQUIRES_RECONCILIATION';
+  paymentStatus: string;
+  dealStatus?: string;
+  paypalOrderId: string;
+  captureId?: string;
+  amount?: number;
+  currency?: string;
+  payerEmail?: string;
+  message: string;
+  isSimulated?: boolean;
+  gatewayMode?: 'live_sandbox' | 'mock_sandbox';
+}
+
 export class PaymentService {
   constructor(
     private dealRepo: DealRepository,
@@ -720,5 +734,183 @@ export class PaymentService {
     }
 
     return this.paymentRepo.getPaymentByDealId(dealId);
+  }
+
+  /**
+   * Dedicated, safe payment status reconciliation.
+   * Probes PayPal order state directly via getOrder() and NEVER initiates a second capture.
+   * Atomically updates payment, deal, and approval state when PayPal confirms COMPLETED.
+   * Safely handles COMPLETED, PENDING, FAILED, and network-interrupted states.
+   */
+  public async reconcilePayment(params: {
+    dealId: string;
+    userId: string;
+  }): Promise<ReconcilePaymentResult> {
+    const deal = this.dealRepo.getDeal(params.dealId);
+    if (!deal) {
+      throw new PaymentSecurityError(404, 'Deal not found.');
+    }
+    if (deal.userId !== params.userId) {
+      throw new PaymentSecurityError(403, 'Unauthorized: Deal belongs to another user.');
+    }
+
+    const payment = this.paymentRepo.getPaymentByDealId(params.dealId);
+    if (!payment) {
+      throw new PaymentSecurityError(404, 'No payment record found for this deal.');
+    }
+    if (payment.userId !== params.userId) {
+      throw new PaymentSecurityError(403, 'Unauthorized: Payment record belongs to another user.');
+    }
+
+    const isMock = Boolean(this.paypalClient.isMock);
+    const gatewayMode = this.paypalClient.gatewayMode || (isMock ? 'mock_sandbox' : 'live_sandbox');
+
+    // If payment is already completed in database, return authoritative record
+    if (payment.status === 'COMPLETED') {
+      return {
+        status: 'COMPLETED',
+        paymentStatus: 'COMPLETED',
+        dealStatus: deal.status,
+        paypalOrderId: payment.paypalOrderId,
+        captureId: payment.paypalCaptureId || undefined,
+        amount: payment.amount,
+        currency: payment.currency,
+        payerEmail: payment.payerEmail || undefined,
+        message: isMock
+          ? 'Payment is already confirmed as COMPLETED (Simulated Mock).'
+          : 'PayPal Sandbox payment is already confirmed as COMPLETED.',
+        isSimulated: isMock,
+        gatewayMode,
+      };
+    }
+
+    const finalDeal = deal.finalDeal;
+    if (!finalDeal) {
+      throw new PaymentSecurityError(400, 'Cannot reconcile payment: No finalized deal terms on file.');
+    }
+
+    const approval = this.approvalRepo.getLatestApprovalForDeal(deal.id);
+    if (!approval) {
+      throw new PaymentSecurityError(400, 'Cannot reconcile payment: No approval record associated with deal.');
+    }
+
+    // Probe PayPal order state directly - NEVER triggers a second capture!
+    let probe: any;
+    try {
+      probe = await this.paypalClient.getOrder(payment.paypalOrderId);
+    } catch (err: unknown) {
+      if (err instanceof PaymentSecurityError) throw err;
+      // Preserve or set REQUIRES_RECONCILIATION status on network failure
+      this.paymentRepo.updateStatus(payment.id, 'REQUIRES_RECONCILIATION', {
+        errorMessage: 'Network interruption during PayPal order status reconciliation.',
+      });
+      throw new PaymentSecurityError(
+        502,
+        'Network interruption: Unable to reconcile order status with PayPal. Please retry.'
+      );
+    }
+
+    // 1. COMPLETED: Validate captured funds and finalize transaction
+    if (probe && probe.status === 'COMPLETED') {
+      const validProbe = this.validateCaptureResult(
+        probe,
+        finalDeal,
+        payment,
+        deal.id,
+        isMock,
+        gatewayMode,
+        true // isReconciliation
+      );
+
+      this.approvalRepo.atomicConsumeApproval(approval.id);
+      this.paymentRepo.updateStatus(payment.id, 'COMPLETED', {
+        captureId: validProbe.captureId,
+        payerEmail: probe.payerEmail,
+        payerId: probe.payerId,
+      });
+      this.dealRepo.updateDealStatus(deal.id, 'payment_completed');
+
+      this.auditRepo.recordEvent(
+        deal.id,
+        'paypal_payment_completed',
+        isMock ? '[SIMULATED MOCK] PayPal Payment Reconciled' : 'PayPal Sandbox Payment Reconciled & Confirmed',
+        isMock
+          ? `[SIMULATED] Reconciliation confirmed completed mock capture. Capture ID: ${validProbe.captureId}.`
+          : `Reconciliation confirmed completed capture with PayPal Sandbox. Capture ID: ${validProbe.captureId}.`,
+        'paypal_gateway',
+        {
+          paypalOrderId: payment.paypalOrderId,
+          captureId: validProbe.captureId,
+          isSimulated: isMock,
+          gatewayMode,
+        }
+      );
+
+      return {
+        status: 'COMPLETED',
+        paymentStatus: 'COMPLETED',
+        dealStatus: 'payment_completed',
+        paypalOrderId: payment.paypalOrderId,
+        captureId: validProbe.captureId,
+        amount: payment.amount,
+        currency: payment.currency,
+        payerEmail: probe.payerEmail,
+        message: isMock
+          ? 'Simulated mock payment confirmed via reconciliation.'
+          : 'PayPal Sandbox payment confirmed via reconciliation.',
+        isSimulated: isMock,
+        gatewayMode,
+      };
+    }
+
+    // 2. APPROVED / CREATED / PENDING: Order is still in progress
+    if (probe && (probe.status === 'APPROVED' || probe.status === 'CREATED' || probe.status === 'PENDING')) {
+      return {
+        status: 'PENDING',
+        paymentStatus: payment.status,
+        dealStatus: deal.status,
+        paypalOrderId: payment.paypalOrderId,
+        amount: payment.amount,
+        currency: payment.currency,
+        message: `PayPal order ${payment.paypalOrderId} is currently ${probe.status}. Buyer authorization or capture is pending.`,
+        isSimulated: isMock,
+        gatewayMode,
+      };
+    }
+
+    // 3. VOIDED / CANCELLED / FAILED / DECLINED
+    if (probe && (probe.status === 'VOIDED' || probe.status === 'CANCELLED' || probe.status === 'DECLINED' || probe.status === 'FAILED')) {
+      this.paymentRepo.updateStatus(payment.id, 'FAILED', {
+        errorMessage: `PayPal order reported terminal status: ${probe.status}`,
+      });
+      this.auditRepo.recordEvent(
+        deal.id,
+        'payment_failed',
+        'PayPal Order Terminal Failure Detected',
+        `Reconciliation detected PayPal order was ${probe.status}.`,
+        'paypal_gateway',
+        { paypalOrderId: payment.paypalOrderId, status: probe.status }
+      );
+      return {
+        status: 'FAILED',
+        paymentStatus: 'FAILED',
+        dealStatus: deal.status,
+        paypalOrderId: payment.paypalOrderId,
+        message: `PayPal payment failed with terminal order status: ${probe.status}`,
+        isSimulated: isMock,
+        gatewayMode,
+      };
+    }
+
+    // Fallback: unrecognised status
+    return {
+      status: 'REQUIRES_RECONCILIATION',
+      paymentStatus: payment.status,
+      dealStatus: deal.status,
+      paypalOrderId: payment.paypalOrderId,
+      message: `Unrecognized PayPal order status '${probe?.status}'. Payment held in reconciliation.`,
+      isSimulated: isMock,
+      gatewayMode,
+    };
   }
 }

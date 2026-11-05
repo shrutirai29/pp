@@ -28,7 +28,7 @@ interface VerificationReportCardProps {
   intent: UserIntent;
   deal?: FinalDeal;
   approvalRecord?: UserApprovalRecord | null;
-  onApprove?: () => void;
+  onApprove?: () => Promise<void> | void;
   onDecline?: () => void;
   authorizationToken?: string;
   isServerOnline?: boolean;
@@ -411,8 +411,10 @@ export const VerificationReportCard: React.FC<VerificationReportCardProps> = ({
           report={report}
           deal={deal}
           approvalRecord={approvalRecord || null}
-          onApprove={() => {
-            if (onApprove) onApprove();
+          onApprove={async () => {
+            if (onApprove) {
+              await onApprove();
+            }
           }}
           onDecline={() => {
             if (onDecline) onDecline();

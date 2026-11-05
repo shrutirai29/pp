@@ -12,6 +12,7 @@ export interface LLMCompletionOptions {
 
 export interface LLMProvider {
   readonly name: string;
+  readonly modelName: string;
   generateCompletion(
     messages: LLMMessage[],
     options?: LLMCompletionOptions

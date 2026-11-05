@@ -3,6 +3,7 @@ import { LLMMessage, LLMCompletionOptions, LLMProvider } from './types.js';
 export interface OpenAICompatibleConfig {
   apiKey: string;
   model: string;
+  providerName?: string;
   baseUrl?: string;
   timeoutMs?: number;
   maxRetries?: number;
@@ -19,16 +20,17 @@ export interface OpenAICompatibleConfig {
  * - Enforces bounded retries and timeout aborts.
  */
 export class OpenAICompatibleProvider implements LLMProvider {
-  public readonly name = 'openai-compatible-provider';
+  public readonly name: string;
+  public readonly modelName: string;
   private apiKey: string;
-  private model: string;
   private baseUrl: string;
   private timeoutMs: number;
   private maxRetries: number;
 
   constructor(config: OpenAICompatibleConfig) {
+    this.name = config.providerName || 'openai-compatible-provider';
     this.apiKey = config.apiKey;
-    this.model = config.model || 'gpt-4o-mini';
+    this.modelName = config.model || 'gpt-4o-mini';
     this.baseUrl = config.baseUrl?.replace(/\/+$/, '') || 'https://api.openai.com/v1';
     this.timeoutMs = config.timeoutMs ?? 15000;
     this.maxRetries = config.maxRetries ?? 2;
@@ -48,7 +50,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     const jsonMode = options?.jsonMode ?? true;
 
     const requestBody: Record<string, any> = {
-      model: this.model,
+      model: this.modelName,
       messages: messages.map((m) => ({
         role: m.role,
         content: m.content,

@@ -25,6 +25,7 @@ export interface NegotiationExecutionResult {
   summary: string;
   engineMode: 'live_llm' | 'mock_llm' | 'fallback';
   providerName: string;
+  modelName: string;
 }
 
 export class NegotiationCoordinator {
@@ -178,6 +179,7 @@ export class NegotiationCoordinator {
         summary: abortMessageText,
         engineMode: 'fallback',
         providerName: this.llmProvider.name,
+        modelName: this.llmProvider.modelName || 'mock-model-v1',
       };
     }
 
@@ -455,9 +457,8 @@ export class NegotiationCoordinator {
       finalDeal,
     };
 
-    const engineMode = this.llmProvider.name === 'openai-compatible-provider'
-      ? 'live_llm'
-      : (this.llmProvider.name === 'mock-llm-provider' ? 'mock_llm' : 'fallback');
+    const isLive = this.llmProvider.name !== 'mock-llm-provider';
+    const engineMode = isLive ? 'live_llm' : 'mock_llm';
 
     return {
       session,
@@ -467,6 +468,7 @@ export class NegotiationCoordinator {
       summary,
       engineMode,
       providerName: this.llmProvider.name,
+      modelName: this.llmProvider.modelName || 'mock-model-v1',
     };
   }
 

@@ -19,6 +19,7 @@ export function createLLMProvider(config: EnvConfig): LLMProvider {
   switch (config.LLM_PROVIDER) {
     case 'groq': {
       return new OpenAICompatibleProvider({
+        providerName: 'groq',
         apiKey: config.LLM_API_KEY,
         model: config.LLM_MODEL && config.LLM_MODEL !== 'mock-model-v1' ? config.LLM_MODEL : 'llama-3.3-70b-versatile',
         baseUrl: config.LLM_BASE_URL || 'https://api.groq.com/openai/v1',
@@ -32,6 +33,7 @@ export function createLLMProvider(config: EnvConfig): LLMProvider {
     case 'gemini': {
       // Explicitly return OpenAI-compatible HTTP client; do not silently fall back to mock
       return new OpenAICompatibleProvider({
+        providerName: config.LLM_PROVIDER,
         apiKey: config.LLM_API_KEY,
         model: config.LLM_MODEL,
         baseUrl: config.LLM_BASE_URL || undefined,

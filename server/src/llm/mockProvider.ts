@@ -14,6 +14,7 @@ export interface MockProviderBehavior {
  */
 export class MockLLMProvider implements LLMProvider {
   public readonly name = 'mock-llm-provider';
+  public readonly modelName = 'mock-model-v1';
   private behavior: MockProviderBehavior = {};
 
   constructor(behavior?: MockProviderBehavior) {
