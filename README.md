@@ -14,9 +14,33 @@
 [![Tests](https://img.shields.io/badge/Tests-182%20Passing-4FAF91)](https://github.com/shrutirai29/pp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-E9E8F8.svg)](https://opensource.org/licenses/MIT)
 
-[Architecture](#-system-architecture) • [Visual Tour](#-visual-tour) • [How It Works](#-how-it-works) • [Security Model](#-zero-trust-security-model) • [Live Proof](#-verified-paypal-sandbox-transaction) • [Quickstart](#-quickstart-guide)
+[Architecture](#-system-architecture) • [Demo Video](#-video-demonstration) • [Visual Tour](#-visual-tour) • [How It Works](#-how-it-works) • [Security Model](#-zero-trust-security-model) • [Live Proof](#-verified-paypal-sandbox-transaction) • [Quickstart](#-quickstart-guide)
 
 </div>
+
+---
+
+## 🎥 Video Demonstration
+
+> **Watch the Complete 2-Minute 50-Second Hackathon Walkthrough:**  
+> 📹 **[Download / Watch Video Demonstration (1080p MP4)](docs/dealmind_demo_video.mp4)**
+
+https://github.com/user-attachments/assets/dealmind_demo_video.mp4 *(or download directly from [`docs/dealmind_demo_video.mp4`](docs/dealmind_demo_video.mp4))*
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                        DealMind + IntentLock™ Video Walkthrough                        │
+│                           Duration: 2m 50s  •  Quality: 1080p 60fps                    │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│  0:00 - 0:31 │ The Problem: Why autonomous AI agents cannot be given direct money     │
+│  0:31 - 0:54 │ Step 1: Buyer Intent Setup & Candidate Offer Discovery in Chrome       │
+│  0:54 - 1:19 │ Step 2: Groq Autonomous Bilateral AI Negotiation ($89.99 ➔ $74.00)     │
+│  1:19 - 1:45 │ Step 3: IntentLock™ 9/9 Invariant Audit & SHA-256 Contract Fingerprint │
+│  1:45 - 2:05 │ Step 4: Human-in-the-Loop Sign-off & Single-Use Authorization Token     │
+│  2:05 - 2:30 │ Step 5: Live PayPal Sandbox Checkout & Server-Side Capture Settlement  │
+│  2:30 - 2:50 │ Step 6: Immutable Cryptographic Audit Ledger & Conclusion              │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
