@@ -19,8 +19,9 @@ declare global {
  */
 export function createAuthMiddleware(config: EnvConfig) {
   return function authMiddleware(req: Request, res: Response, next: NextFunction) {
-    // 1. Whitelisted public endpoints
+    // 1. Whitelisted public endpoints and non-API frontend static requests
     if (
+      !req.path.startsWith('/api') ||
       req.path === '/health' ||
       req.path === '/api/config/paypal' ||
       req.path === '/api/auth/session' ||

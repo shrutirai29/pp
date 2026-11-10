@@ -2,6 +2,7 @@ import express, { Express } from 'express';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { DatabaseSync } from './db/sqliteAdapter.js';
 import { EnvConfig } from './config/env.js';
 import { DealRepository } from './repositories/dealRepository.js';
@@ -19,6 +20,9 @@ import { createApiRouter } from './routes/api.js';
 import { createAuthMiddleware, authMiddleware } from './middleware/auth.js';
 import { rateLimiter } from './middleware/rateLimiter.js';
 import { errorHandler } from './middleware/errorHandler.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export function createApp(
   db: DatabaseSync,
@@ -62,7 +66,7 @@ export function createApp(
   // Global rate limiter
   app.use(rateLimiter(300, 60000));
 
-  // Server-verified identity authentication middleware
+  // Server-verified identity authentication middleware (protects all /api endpoints except whitelisted public routes)
   app.use(createAuthMiddleware(config));
 
   // Repositories
@@ -103,7 +107,7 @@ export function createApp(
     paypalClient = new MockPayPalClient();
   }
 
-  // Dedicated Payment Service
+  // Payment Service
   const paymentService = new PaymentService(
     dealRepo,
     verifRepo,
@@ -114,7 +118,7 @@ export function createApp(
     config
   );
 
-  // Health check endpoint
+  // Health check endpoint (public, unauthenticated)
   app.get('/health', (_req, res) => {
     res.json({
       status: 'ok',
@@ -146,6 +150,8 @@ export function createApp(
   const possibleDistDirs = [
     path.resolve(process.cwd(), 'dist'),
     path.resolve(process.cwd(), '../dist'),
+    path.resolve(__dirname, '../../dist'),
+    path.resolve(__dirname, '../dist'),
   ];
   const frontendDir = possibleDistDirs.find((dir) => fs.existsSync(path.join(dir, 'index.html')));
 
