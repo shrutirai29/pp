@@ -35,4 +35,14 @@ dist-ssr
 *.sqlite
 *.sqlite*
 server/data/
+
+# Video files (never commit binary media to GitHub)
+*.mp4
+*.m4v
+*.mov
 /data/
+
+# Video files (never commit binary media to GitHub)
+*.mp4
+*.m4v
+*.mov
