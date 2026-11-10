@@ -14,9 +14,35 @@
 [![Tests](https://img.shields.io/badge/Tests-182%20Passing-4FAF91)](https://github.com/shrutirai29/pp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-E9E8F8.svg)](https://opensource.org/licenses/MIT)
 
-[Architecture](#-system-architecture) • [Demo Walkthrough](#-video-walkthrough) • [Visual Tour](#-visual-tour) • [How It Works](#-how-it-works) • [Security Model](#-zero-trust-security-model) • [Live Proof](#-verified-paypal-sandbox-transaction) • [Quickstart](#-quickstart-guide)
+[Architecture](#-system-architecture) • [Demo Walkthrough](#-video-walkthrough) • [Deploy on Render](#-deploy-to-render) • [Visual Tour](#-visual-tour) • [How It Works](#-how-it-works) • [Security Model](#-zero-trust-security-model) • [Live Proof](#-verified-paypal-sandbox-transaction) • [Quickstart](#-quickstart-guide)
 
 </div>
+
+---
+
+## 🚀 Deploy to Render
+
+DealMind + IntentLock™ is pre-configured for instant deployment on [Render](https://render.com) using the included `render.yaml` Blueprint.
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/shrutirai29/pp)
+
+### Instant Setup Steps:
+1. Open your [Render Dashboard](https://dashboard.render.com).
+2. Click **New +** ➔ **Blueprint**.
+3. Select your repository: `https://github.com/shrutirai29/pp`.
+4. Render detects `render.yaml` and sets up the unified Web Service.
+5. Fill in the environment variables:
+   * `PAYPAL_CLIENT_ID`: Your PayPal Sandbox Client ID
+   * `PAYPAL_CLIENT_SECRET`: Your PayPal Sandbox Secret
+   * `LLM_API_KEY`: Your Groq API key (`gsk_...`)
+   * `PAYPAL_RETURN_URL`: `https://<your-render-app>.onrender.com`
+   * `PAYPAL_CANCEL_URL`: `https://<your-render-app>.onrender.com`
+6. Click **Apply**. Render will install dependencies, build the frontend & backend, and launch your live URL!
+
+* **Manual Settings (if not using Blueprints)**:
+  * **Build Command**: `npm install && npm --prefix server install && npm run build`
+  * **Start Command**: `node --experimental-sqlite server/dist/server.js`
+  * **Health Check Path**: `/health`
 
 ---
 

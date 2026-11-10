@@ -1,5 +1,7 @@
 import express, { Express } from 'express';
 import cors from 'cors';
+import path from 'path';
+import fs from 'fs';
 import { DatabaseSync } from './db/sqliteAdapter.js';
 import { EnvConfig } from './config/env.js';
 import { DealRepository } from './repositories/dealRepository.js';
@@ -29,7 +31,14 @@ export function createApp(
   // Explicit CORS configuration (allows localhost ports in dev, enforces strict origin in production)
   const allowedOrigin =
     config.NODE_ENV === 'production'
-      ? config.CORS_ORIGIN
+      ? (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+          // Allow same-origin (no origin header), configured CORS_ORIGIN, or any onrender.com domain
+          if (!origin || origin === config.CORS_ORIGIN || origin.endsWith('.onrender.com') || /^https:\/\/[a-zA-Z0-9-]+\.onrender\.com$/.test(origin)) {
+            callback(null, true);
+          } else {
+            callback(null, false);
+          }
+        }
       : (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
           if (!origin || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) || origin === config.CORS_ORIGIN) {
             callback(null, true);
@@ -132,6 +141,23 @@ export function createApp(
 
   // Centralized error handler
   app.use(errorHandler);
+
+  // Serve built frontend assets in production / unified deployment
+  const possibleDistDirs = [
+    path.resolve(process.cwd(), 'dist'),
+    path.resolve(process.cwd(), '../dist'),
+  ];
+  const frontendDir = possibleDistDirs.find((dir) => fs.existsSync(path.join(dir, 'index.html')));
+
+  if (frontendDir) {
+    app.use(express.static(frontendDir));
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api') || req.path.startsWith('/health')) {
+        return next();
+      }
+      res.sendFile(path.join(frontendDir, 'index.html'));
+    });
+  }
 
   return app;
 }
