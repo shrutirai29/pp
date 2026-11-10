@@ -14,31 +14,29 @@
 [![Tests](https://img.shields.io/badge/Tests-182%20Passing-4FAF91)](https://github.com/shrutirai29/pp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-E9E8F8.svg)](https://opensource.org/licenses/MIT)
 
-[Architecture](#-system-architecture) • [Demo Video](#-video-demonstration) • [Visual Tour](#-visual-tour) • [How It Works](#-how-it-works) • [Security Model](#-zero-trust-security-model) • [Live Proof](#-verified-paypal-sandbox-transaction) • [Quickstart](#-quickstart-guide)
+[Architecture](#-system-architecture) • [Demo Walkthrough](#-video-walkthrough) • [Visual Tour](#-visual-tour) • [How It Works](#-how-it-works) • [Security Model](#-zero-trust-security-model) • [Live Proof](#-verified-paypal-sandbox-transaction) • [Quickstart](#-quickstart-guide)
 
 </div>
 
 ---
 
-## 🎥 Video Demonstration
+## 🎥 Video Walkthrough
 
-> **Watch the Complete 2-Minute 50-Second Hackathon Walkthrough:**  
-> 📹 **[Download / Watch Video Demonstration (1080p MP4)](docs/dealmind_demo_video.mp4)**
-
-https://github.com/user-attachments/assets/dealmind_demo_video.mp4 *(or download directly from [`docs/dealmind_demo_video.mp4`](docs/dealmind_demo_video.mp4))*
+> **Hackathon Submission Demo Video (Under 3 Minutes):**  
+> *Demonstrating end-to-end autonomous negotiation, IntentLock™ 9/9 invariant verification, human cryptographic sign-off, and live PayPal Sandbox capture.*
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
 │                        DealMind + IntentLock™ Video Walkthrough                        │
-│                           Duration: 2m 50s  •  Quality: 1080p 60fps                    │
+│                           Duration: < 3 Minutes  •  Quality: 1080p Full HD             │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
-│  0:00 - 0:31 │ The Problem: Why autonomous AI agents cannot be given direct money     │
-│  0:31 - 0:54 │ Step 1: Buyer Intent Setup & Candidate Offer Discovery in Chrome       │
-│  0:54 - 1:19 │ Step 2: Groq Autonomous Bilateral AI Negotiation ($89.99 ➔ $74.00)     │
-│  1:19 - 1:45 │ Step 3: IntentLock™ 9/9 Invariant Audit & SHA-256 Contract Fingerprint │
-│  1:45 - 2:05 │ Step 4: Human-in-the-Loop Sign-off & Single-Use Authorization Token     │
-│  2:05 - 2:30 │ Step 5: Live PayPal Sandbox Checkout & Server-Side Capture Settlement  │
-│  2:30 - 2:50 │ Step 6: Immutable Cryptographic Audit Ledger & Conclusion              │
+│  Phase 1 │ The Core Problem: Why autonomous AI agents cannot be given direct money     │
+│  Phase 2 │ Step 1: Buyer Intent Setup & Candidate Offer Discovery in Chrome            │
+│  Phase 3 │ Step 2: Groq Autonomous Bilateral AI Negotiation ($89.99 ➔ $74.00)          │
+│  Phase 4 │ Step 3: IntentLock™ 9/9 Invariant Audit & SHA-256 Contract Fingerprint      │
+│  Phase 5 │ Step 4: Human-in-the-Loop Sign-off & Single-Use Authorization Token          │
+│  Phase 6 │ Step 5: Live PayPal Sandbox Checkout & Server-Side Capture Settlement       │
+│  Phase 7 │ Step 6: Immutable Cryptographic Audit Ledger & Conclusion                   │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
