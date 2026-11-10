@@ -1,5 +1,9 @@
 import { z } from 'zod';
 
+const DEFAULT_SANDBOX_CLIENT_ID = 'BAAmUIptx_DbDF2S_IWAYBO9uHr-ciYXT9NGFbHxNchXwtfoSzJgUkXW-lGg31JOj2lSrFRRhe6M3OSqVg';
+const DEFAULT_SANDBOX_SECRET = 'EP4PcmLLVbBL5KswxAmeZTiz0rCKFRPS_SvrIhqesslAvH7TQvoMz50ewwkSO6627IaG18UI0uIh5tWC';
+const DEFAULT_HMAC_SECRET = 'e8f9b2a1c4d3e5f7a0b2c4d6e8f0a2b4c6d8e0f2a4b6c8d0e2f4a6b8c0d2e4f6';
+
 export const EnvSchema = z
   .object({
     PORT: z.coerce.number().default(4000),
@@ -7,13 +11,13 @@ export const EnvSchema = z
     CORS_ORIGIN: z.string().default('http://localhost:5173'),
     DATABASE_PATH: z.string().default('data/dealmind.sqlite'),
     APPROVAL_VALIDITY_SECONDS: z.coerce.number().default(900), // 15 mins
-    TOKEN_HMAC_SECRET: z.string().default('dev_insecure_hmac_secret_for_demo_only'),
-    PAYPAL_CLIENT_ID: z.string().default(''),
-    PAYPAL_CLIENT_SECRET: z.string().default(''),
+    TOKEN_HMAC_SECRET: z.string().default(DEFAULT_HMAC_SECRET),
+    PAYPAL_CLIENT_ID: z.string().default(DEFAULT_SANDBOX_CLIENT_ID),
+    PAYPAL_CLIENT_SECRET: z.string().default(DEFAULT_SANDBOX_SECRET),
     PAYPAL_ENV: z.enum(['sandbox', 'production']).default('sandbox'),
     PAYPAL_BASE_URL: z.string().default('https://api-m.sandbox.paypal.com'),
-    PAYPAL_RETURN_URL: z.string().default('http://localhost:5173'),
-    PAYPAL_CANCEL_URL: z.string().default('http://localhost:5173'),
+    PAYPAL_RETURN_URL: z.string().default('https://dealmind-intentlock-app.onrender.com'),
+    PAYPAL_CANCEL_URL: z.string().default('https://dealmind-intentlock-app.onrender.com'),
 
     // LLM Provider Configuration
     LLM_PROVIDER: z.enum(['mock', 'openai', 'anthropic', 'gemini', 'groq']).default('mock'),

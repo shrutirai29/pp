@@ -20,18 +20,16 @@ services:
       - key: PAYPAL_BASE_URL
         value: https://api-m.sandbox.paypal.com
       - key: LLM_PROVIDER
-        value: groq
+        value: mock
       - key: LLM_MODEL
-        value: openai/gpt-oss-120b
+        value: mock-model-v1
       - key: TOKEN_HMAC_SECRET
-        generateValue: true
+        value: e8f9b2a1c4d3e5f7a0b2c4d6e8f0a2b4c6d8e0f2a4b6c8d0e2f4a6b8c0d2e4f6
       - key: PAYPAL_CLIENT_ID
-        sync: false
+        value: BAAmUIptx_DbDF2S_IWAYBO9uHr-ciYXT9NGFbHxNchXwtfoSzJgUkXW-lGg31JOj2lSrFRRhe6M3OSqVg
       - key: PAYPAL_CLIENT_SECRET
-        sync: false
-      - key: LLM_API_KEY
-        sync: false
+        value: EP4PcmLLVbBL5KswxAmeZTiz0rCKFRPS_SvrIhqesslAvH7TQvoMz50ewwkSO6627IaG18UI0uIh5tWC
       - key: PAYPAL_RETURN_URL
-        sync: false
+        value: https://dealmind-intentlock-app.onrender.com
       - key: PAYPAL_CANCEL_URL
-        sync: false
+        value: https://dealmind-intentlock-app.onrender.com
