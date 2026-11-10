@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: dealmind-intentlock
+    name: dealmind-intentlock-app
     runtime: node
     plan: free
     region: oregon

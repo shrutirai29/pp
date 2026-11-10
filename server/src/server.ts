@@ -12,7 +12,7 @@ const config = loadConfig();
 const db = initDatabase(config.DATABASE_PATH);
 const app = createApp(db, config);
 
-app.listen(config.PORT, () => {
+app.listen(config.PORT, '0.0.0.0', () => {
   console.log(`[DealMind IntentLock Server] running on http://localhost:${config.PORT} (mode: ${config.NODE_ENV})`);
   console.log(`[Database] initialized at ${config.DATABASE_PATH}`);
 });
