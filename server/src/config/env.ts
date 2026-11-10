@@ -12,6 +12,8 @@ export const EnvSchema = z
     PAYPAL_CLIENT_SECRET: z.string().default(''),
     PAYPAL_ENV: z.enum(['sandbox', 'production']).default('sandbox'),
     PAYPAL_BASE_URL: z.string().default('https://api-m.sandbox.paypal.com'),
+    PAYPAL_RETURN_URL: z.string().default('http://localhost:5173'),
+    PAYPAL_CANCEL_URL: z.string().default('http://localhost:5173'),
 
     // LLM Provider Configuration
     LLM_PROVIDER: z.enum(['mock', 'openai', 'anthropic', 'gemini', 'groq']).default('mock'),

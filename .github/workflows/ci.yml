@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    env:
+      NODE_ENV: test
+      LLM_PROVIDER: mock
+      PAYPAL_ENV: sandbox
+      PAYPAL_BASE_URL: https://api-m.sandbox.paypal.com
+      TOKEN_HMAC_SECRET: ci-mock-hmac-secret-min-32-characters-ok
+      PAYPAL_RETURN_URL: http://localhost:5173
+      PAYPAL_CANCEL_URL: http://localhost:5173
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install server dependencies
+        run: npm --prefix server ci
+
+      - name: Build server (TypeScript)
+        run: npm --prefix server run build
+
+      - name: Build frontend (Vite + TypeScript)
+        run: npm run build
+
+      - name: Run server preflight check
+        run: npm --prefix server run preflight
+
+      - name: Run backend tests
+        run: npm --prefix server test
+
+      - name: Run full workspace tests
+        run: npm test

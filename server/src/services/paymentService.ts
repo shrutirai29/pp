@@ -202,7 +202,7 @@ export class PaymentService {
   /**
    * Pre-capture validation: verifies the bound approval record and deal terms before capture.
    */
-  public validateDealForCapture(dealId: string, userId: string, boundApprovalId: string) {
+  public validateDealForCapture(dealId: string, userId: string, boundApprovalId: string, paymentCreatedAt?: string) {
     const deal = this.dealRepo.getDeal(dealId);
     if (!deal) {
       throw new PaymentSecurityError(404, 'Deal not found.');
@@ -239,7 +239,9 @@ export class PaymentService {
       throw new PaymentSecurityError(400, `Cannot capture payment under approval status: ${approval.status}.`);
     }
 
-    if (new Date() > new Date(approval.expiresAt)) {
+    // If payment was created while human approval was valid, the checkout was legitimately authorized.
+    const referenceTime = paymentCreatedAt ? new Date(paymentCreatedAt) : new Date();
+    if (referenceTime > new Date(approval.expiresAt)) {
       this.approvalRepo.updateToExpired(approval.id);
       throw new PaymentSecurityError(400, 'Human approval expired prior to capture.');
     }
@@ -320,6 +322,8 @@ export class PaymentService {
       amount: authoritativeAmount,
       currency: authoritativeCurrency,
       idempotencyKey: params.idempotencyKey,
+      returnUrl: this.config.PAYPAL_RETURN_URL,
+      cancelUrl: this.config.PAYPAL_CANCEL_URL,
     });
 
     const paymentId = `pay-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
@@ -428,7 +432,12 @@ export class PaymentService {
     }
 
     // 1. Authoritative deal and approval re-verification before capture
-    const validation = this.validateDealForCapture(params.dealId, params.userId, payment.approvalId);
+    const validation = this.validateDealForCapture(
+      params.dealId,
+      params.userId,
+      payment.approvalId,
+      payment.createdAt
+    );
     const { deal, finalDeal, approval } = validation;
 
     // Defensive check: payment amount and currency must match authoritative approved deal terms

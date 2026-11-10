@@ -81,7 +81,9 @@ export function createApp(
     paypalClient = new HttpPayPalClient(
       config.PAYPAL_CLIENT_ID,
       config.PAYPAL_CLIENT_SECRET,
-      config.PAYPAL_BASE_URL
+      config.PAYPAL_BASE_URL,
+      config.PAYPAL_RETURN_URL,
+      config.PAYPAL_CANCEL_URL
     );
   } else {
     if (config.NODE_ENV === 'production') {

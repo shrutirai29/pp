@@ -1,6 +1,6 @@
-# DealMind + IntentLock: Demo Runbook & Judge Guide
+# DealMind + IntentLock: Demo Runbook & Evaluation Guide
 
-This runbook provides complete instructions for running, testing, and presenting **DealMind + IntentLock** for the PayPal AI Hackathon.
+This runbook provides complete instructions for running, testing, and presenting **DealMind + IntentLock** for the PayPal AI Commerce & Transaction Security Hackathon.
 
 ---
 
@@ -8,52 +8,83 @@ This runbook provides complete instructions for running, testing, and presenting
 
 **DealMind** is an autonomous multi-agent negotiation system where an AI Buyer Agent negotiates on behalf of a user against simulated or real Seller Agents within strict, user-authorized purchase boundaries.
 
-**IntentLock** is an independent transaction security gateway that prevents AI hallucination, agent drift, and unauthorized payments. It enforces:
-1. **Zero-Trust Verification**: Validates the final negotiated agreement directly against the user's initial purchase intent (budget ceiling, delivery window, warranty requirements).
+**IntentLock™** is an independent, server-enforced transaction security gateway that prevents AI agent drift, prompt injection exploits, and unauthorized payments. It enforces:
+
+1. **Zero-Trust Verification**: Audits the seller-accepted final agreement directly against the user's initial purchase intent (budget ceiling, delivery window, warranty requirements, no hidden subscriptions, and fee itemization).
 2. **Cryptographic Fingerprinting**: Calculates a canonical SHA-256 hash of all agreed transaction terms (`dealFingerprint`).
-3. **Explicit Human-in-the-Loop Approval**: Issues an HMAC-SHA256 signed approval token with a 15-minute expiration time-to-live (TTL).
+3. **Explicit Human-in-the-Loop Approval**: Issues an HMAC-SHA256 signed single-use authorization token with an approval countdown time-to-live (TTL).
 4. **PayPal Currency Safety**: Strictly enforces supported PayPal REST API currencies (`USD`, `EUR`, `GBP`, etc.) without silent conversions or rate substitutions. Unsupported currencies (like `INR`) are rejected outright before order creation.
-5. **Single-Use Atomic Authorization**: Consumes the authorization token atomically in PayPal Sandbox checkout, permanently binding the PayPal Order ID to the IntentLock verification record.
+5. **Single-Use Atomic Authorization**: Consumes the authorization token atomically in PayPal Sandbox checkout, permanently binding the PayPal Order ID and Capture ID to the IntentLock verification record.
 6. **Tamper-Evident Audit Trail**: Persists an immutable hash-chained audit log of every event.
 
 ```
 [ User Purchase Intent (USD) ]
              │
              ▼
-[ Autonomous Negotiation ] ── (Buyer Agent ◄──► Seller Agent, up to 5 rounds)
+[ Autonomous Negotiation ] ◄──► (Buyer Agent ◄──► Seller Agent, Groq LLM / Heuristics)
              │
              ▼
     [ Final Agreement ]
              │
              ▼
-  [ IntentLock Gateway ] ── Independent Verification (Budget, Delivery, Warranty)
-             │           ── Computes canonical SHA-256 Deal Fingerprint
+  [ IntentLock Gateway ] ───► Independent 9-Criteria Audit (Budget, Delivery, Warranty...)
+             │           ───► Computes canonical SHA-256 Contract Fingerprint
              ▼
- [ Explicit Human Approval ] ── 15-minute TTL countdown, HMAC-SHA256 Signed Token
+ [ Explicit Human Approval ] ───► 15-minute TTL, HMAC-SHA256 Signed Authorization Token
              │
              ▼
-[ PayPal Sandbox Checkout ] ── Currency Allowlist, Atomic Consumption, Amount Binding
+[ PayPal Sandbox Checkout ] ───► Currency Allowlist, Return/Cancel URLs, Order Creation
              │
              ▼
-  [ Immutable Audit Trail ] ── Hash-chained tamper-evident event log
+[ Authoritative Server Capture ] ───► PayPal Capture API, Atomic Single-Use Token Consumption
+             │
+             ▼
+  [ Immutable Audit Trail ] ───► Tamper-evident event log persisted in SQLite
 ```
 
 ---
 
-## 2. Runtime Requirements & Prerequisites
+## 2. Verified Live Transaction Reference
 
-- **Node.js**: `v22.x` or higher (utilizes Node.js native `--experimental-sqlite` module).
-- **Package Manager**: `npm` (bundled with Node.js).
-- **Operating System**: Windows, macOS, or Linux.
-- **Network**: Internet connection required for live PayPal Sandbox or live OpenAI API; zero network required when operating in Mock mode.
+The end-to-end payment lifecycle has been verified against PayPal Sandbox:
+
+| Parameter | Authoritative Value |
+|---|---|
+| **Product** | Samsung 980 1TB PCIe 3.0 NVMe M.2 Internal SSD |
+| **Seller** | TechHaven Direct |
+| **Deal ID** | `intent_1793891217448` |
+| **Buyer Budget Ceiling** | `$85.00 USD` |
+| **Agreed Total Payable** | `$74.00 USD` |
+| **Delivery Estimate** | 2 Days (Free Delivery) |
+| **Warranty** | 60 Months Official Manufacturer Warranty |
+| **IntentLock Status** | `VERIFIED` (9/9 criteria passed) |
+| **Contract Fingerprint** | `bcceecd365a58b4354218991e2f405a9b5d0e2aaa4134cef74129cd02460f2de` |
+| **PayPal Order ID** | `7M922293E62170201` |
+| **PayPal Capture ID** | `12P5471025765970Y` |
+| **PayPal Order Status** | `COMPLETED` |
+| **Capture Status** | `COMPLETED` (`final_capture: true`) |
+| **Captured Amount** | `$74.00 USD` (Gross: `$74.00`, Fee: `$3.76`, Net: `$70.24`) |
+| **Authorization Status** | `CONSUMED` |
+| **Local Payment Status** | `COMPLETED` |
+| **Deal Status** | `payment_completed` |
 
 ---
 
-## 3. Environment Configuration & Variables
+## 3. Runtime Requirements & Prerequisites
 
-The backend reads its environment variables using `dotenv`. It automatically checks `server/.env` (when running via npm scripts inside the `server/` directory) as well as the repository root `.env`.
+- **Node.js**: `v22.x` or `v24.x` (utilizes Node.js native `--experimental-sqlite` module).
+- **Package Manager**: `npm` (v10+).
+- **Operating System**: Windows, macOS, or Linux.
+- **Network**: Internet connection required for live PayPal Sandbox or Groq LLM API; zero external network required when operating in Mock mode.
 
-Create a `server/.env` file (or root `.env`) based on `server/.env.example`. **Never commit real credentials to version control.**
+---
+
+## 4. Environment Configuration & Variables
+
+The backend reads its environment variables using `dotenv`. Create a `server/.env` file based on `server/.env.example`.
+
+> [!CAUTION]
+> **Never commit real credentials, API keys, or secrets to version control.**
 
 ```bash
 # Network & Runtime Configuration
@@ -62,19 +93,21 @@ NODE_ENV=development
 CORS_ORIGIN=http://localhost:5173
 DATABASE_PATH=data/dealmind.sqlite
 APPROVAL_VALIDITY_SECONDS=900
-TOKEN_HMAC_SECRET=dev_insecure_hmac_secret_for_demo_only
+TOKEN_HMAC_SECRET=dev_insecure_hmac_secret_for_demo_only_min_32_chars
 
 # PayPal Sandbox Configuration (Sandbox ONLY - Live PayPal is strictly prohibited)
 PAYPAL_CLIENT_ID=your_sandbox_client_id_here
 PAYPAL_CLIENT_SECRET=your_sandbox_client_secret_here
 PAYPAL_ENV=sandbox
 PAYPAL_BASE_URL=https://api-m.sandbox.paypal.com
+PAYPAL_RETURN_URL=http://localhost:5173/verification?paypal=return
+PAYPAL_CANCEL_URL=http://localhost:5173/verification?paypal=cancel
 
 # LLM Provider Configuration
-# Supported providers: 'mock' (default, offline, zero-cost) or 'openai' | 'anthropic' | 'gemini'
+# Supported providers: 'mock' (default, offline, zero-cost) or 'groq' | 'openai' | 'anthropic' | 'gemini'
 LLM_PROVIDER=mock
 LLM_API_KEY=
-LLM_MODEL=gpt-4o-mini
+LLM_MODEL=openai/gpt-oss-120b
 LLM_BASE_URL=
 LLM_TIMEOUT_MS=15000
 LLM_MAX_RETRIES=2
@@ -82,23 +115,27 @@ LLM_MAX_RETRIES=2
 
 ### Critical Security Configuration Rules:
 1. **Sandbox-Only Guarantee**: `PAYPAL_ENV` must be `sandbox` and `PAYPAL_BASE_URL` must point to `https://api-m.sandbox.paypal.com`. Any attempt to configure a production PayPal URL (`api-m.paypal.com`) causes immediate startup termination.
-2. **OpenAI Configuration**: For OpenAI live negotiation, set `LLM_PROVIDER=openai` and `LLM_API_KEY=your_key`. The key remains strictly backend-only.
-3. **HMAC Signing Secret**: `TOKEN_HMAC_SECRET` signs human approval tokens using HMAC-SHA256. In production, provide a strong 64+ character random string.
+2. **Groq / OpenAI Configuration**: For live LLM negotiation, set `LLM_PROVIDER=groq` and `LLM_API_KEY=your_key` with model `openai/gpt-oss-120b`. The API key remains strictly backend-only.
+3. **HMAC Signing Secret**: `TOKEN_HMAC_SECRET` signs human approval tokens and session tokens using HMAC-SHA256.
+4. **PayPal Return & Cancel URLs**: Wired into the PayPal order creation `application_context` to prevent hosted checkout redirect failures.
 
 ---
 
-## 4. Quickstart & Verification Commands
+## 5. Quickstart & Verification Commands
 
 ### Step A: Install Dependencies
 ```bash
+# Install root and frontend dependencies
 npm install
+
+# Install server dependencies
+npm --prefix server install
 ```
 
 ### Step B: Run Safe Preflight Check
-Verify all configurations, provider readiness, sandbox safety, and currency allowlists without creating any orders or capturing any payments:
+Verify all configurations, provider readiness, sandbox safety, and currency allowlists without creating orders or capturing payments:
 ```bash
-npm run preflight
-# or: npm run server:preflight
+npm --prefix server run preflight
 ```
 Alternatively, query the live backend preflight endpoint:
 ```bash
@@ -107,17 +144,20 @@ curl http://localhost:4000/api/preflight
 
 ### Step C: Run Automated Tests
 ```bash
-# Run all frontend and backend tests
-npm test
+# Run backend test suite (128 tests across 6 suites)
+npm --prefix server test
 
-# Run backend security and gateway tests only
-npm run server:test
+# Run full workspace test suite (182 tests across 10 suites)
+npm test
 ```
 
 ### Step D: Verify Production Builds
 ```bash
-# Compiles both frontend (Vite) and backend (TypeScript)
-npm run build:all
+# Compiles backend TypeScript
+npm --prefix server run build
+
+# Compiles frontend Vite + TypeScript
+npm run build
 ```
 
 ### Step E: Start Servers for Demo
@@ -125,7 +165,7 @@ Open two terminal windows:
 
 **Terminal 1 (Backend API & Security Gateway on port 4000):**
 ```bash
-npm run server:start
+npm --prefix server run dev
 # Output: [DealMind IntentLock Server] running on http://localhost:4000 (mode: development)
 ```
 
@@ -139,71 +179,87 @@ Access the application in your browser at `http://localhost:5173`.
 
 ---
 
-## 5. Live Judge Walkthrough: Happy Path (USD)
+## 6. Live Judge Walkthrough: Happy Path ($74.00 USD)
 
 Follow these steps to demonstrate the full end-to-end user journey:
 
 1. **Set Purchase Intent**:
-   - On the homepage, inspect the prefilled USD intent:
+   - On the left sidebar navigation, click **"Find a Deal"** or click **"Find My Deal →"** in the hero.
+   - Inspect the prefilled USD intent:
      - **Item**: 1TB NVMe M.2 SSD
      - **Max Budget**: $85.00 USD
      - **Max Delivery**: 3 Days
      - **Min Warranty**: 12 Months
+     - **Condition**: New
+     - **Subscriptions**: Prohibited
      - **Currency**: `USD`
    - Click **"Find Best Deals"**.
    - Note that eligible offers are retrieved and ranked deterministically by the backend.
 
 2. **Autonomous AI Negotiation**:
-   - Select an eligible seller offer (*TechHaven Direct* at $74.00 asking price, or *Prime Storage Solutions* at $83.00 asking price).
+   - Select the eligible seller offer (*TechHaven Direct* with asking price $74.00 USD).
    - Click **"Start Autonomous Negotiation"**.
    - Observe the live dialogue indicator (`Autonomous Dialogue in Progress...`).
-   - The Buyer Agent and Seller Agent exchange proposals across up to 5 rounds, negotiating price, shipping waiver, and warranty.
-   - The negotiation reaches agreement at **$68.00 USD** (within the user's $85.00 budget ceiling).
+   - The Buyer Agent and Seller Agent exchange proposals across negotiation rounds, validating price, delivery speed, and warranty.
+   - The negotiation reaches agreement at **$74.00 USD** (within the user's $85.00 budget ceiling, 2-day delivery, 60-month warranty).
 
 3. **IntentLock Independent Verification**:
    - The app transitions to the IntentLock security screen.
-   - Click **"Verify Deal Terms"**.
-   - IntentLock performs an out-of-band verification against the original user intent.
-   - Note the green status badges:
-     - Total Payable: $68.00 ≤ $85.00 (Compliant)
-     - Delivery: 2 days ≤ 3 days (Compliant)
-     - Warranty: 60 months ≥ 12 months (Compliant)
-     - Currency: USD (Allowlisted for PayPal checkout)
-   - View the computed **Canonical SHA-256 Fingerprint** (`dealFingerprint`).
+   - Click **"Proceed to IntentLock Verification"**.
+   - IntentLock independently audits all 9 criteria against original user intent:
+     - Check 1: Transaction Status & Bilateral Acceptance (PASSED)
+     - Check 2: Transaction Currency Invariance (`USD == USD`, PASSED)
+     - Check 3: Product Identity & Integrity (PASSED)
+     - Check 4: Hardware Condition Verification (New, PASSED)
+     - Check 5: Independent Budget & Total Payability Audit ($74.00 ≤ $85.00, PASSED)
+     - Check 6: Fulfillment & Delivery Window (2 days ≤ 3 days, PASSED)
+     - Check 7: Hidden Recurring Charges & Subscription Mandates (Zero subscriptions, PASSED)
+     - Check 8: Ancillary Fee Disclosure & Itemization (PASSED)
+     - Check 9: Warranty Coverage & Hardware Protection (60 mos ≥ 12 mos, PASSED)
+   - View the computed **Canonical SHA-256 Fingerprint**:
+     `bcceecd365a58b4354218991e2f405a9b5d0e2aaa4134cef74129cd02460f2de`
 
 4. **Explicit Human Approval**:
-   - The system displays the approval countdown timer (**15:00 TTL**).
-   - Review the final terms: Price, Delivery, Warranty, and cryptographic hash.
+   - The system displays the human approval countdown timer (**15:00 TTL**).
+   - Review the final terms: Price, Delivery, Warranty, and cryptographic fingerprint.
    - Click **"Approve & Sign Authorization"**.
-   - An HMAC-SHA256 signed `approvalToken` is generated and securely persisted.
+   - An HMAC-SHA256 signed `authorizationToken` is generated and securely registered in SQLite (`status: APPROVED`, `consumed_at: NULL`).
 
-5. **PayPal Sandbox Checkout**:
+5. **PayPal Sandbox Checkout & Authoritative Capture**:
    - Click **"Pay with PayPal"**.
    - The server verifies that the approval token is valid, active, unexpired, and unused.
-   - It validates that `USD` is on the PayPal REST API allowlist.
-   - It creates an authorized PayPal order strictly for the verified amount (`68.00 USD`).
-   - The approval token is atomically consumed (`consumedAt` timestamp set).
-   - The transaction transitions to `COMPLETED` with an assigned `paypalCaptureId`.
+   - It creates a PayPal Sandbox order bound to contract fingerprint (`7M922293E62170201` for `$74.00 USD`).
+   - Buyer completes approval in PayPal Sandbox hosted checkout.
+   - Backend performs authoritative server-side capture via `/api/deals/:id/capture`.
+   - The capture is validated: amount `$74.00`, currency `USD`, capture ID `12P5471025765970Y`.
+   - The authorization token is atomically transitioned to `CONSUMED`.
+   - The transaction transitions to `COMPLETED` and deal status to `payment_completed`.
 
 6. **Audit Trail Inspection**:
-   - Navigate to the **Audit Timeline** tab.
+   - Navigate to the **Audit Trail** tab in the sidebar.
    - Inspect the immutable event log:
-     - `deal_verified`
-     - `human_approval_granted`
-     - `payment_authorization_created`
+     - `requirements_created`
+     - `offers_compared`
+     - `negotiation_started`
+     - `counteroffer_received`
+     - `verification_completed`
+     - `fingerprint_generated`
+     - `human_approval_requested`
+     - `approval_granted`
+     - `paypal_order_created`
      - `paypal_payment_completed`
-   - Every event includes a timestamp, actor, status, and payload hash.
+   - Every event includes a timestamp, actor, status, and payload details.
 
 ---
 
-## 6. Failure & Security Demonstration Scenarios
+## 7. Failure & Security Demonstration Scenarios
 
 To prove that IntentLock is not mere "UI theater", present these failure demonstrations to the judges:
 
 ### Failure Scenario 1: PayPal Currency Safety & Unsupported Currency Rejection
-1. If a deal is created with `currency: "INR"` (or any currency not on the PayPal REST API allowlist):
+1. If a deal is initiated with `currency: "INR"` (or any currency not on the PayPal REST API allowlist):
 2. Click **"Verify Deal"** and attempt checkout.
-3. **Result**: IntentLock and the PayPal payment service reject the transaction with HTTP 400:
+3. **Result**: IntentLock and the payment service reject the transaction with HTTP 400:
    ```json
    {
      "error": "Currency 'INR' is not supported by PayPal. Checkout requires a supported currency (AUD, BRL, CAD, CNY, CZK, DKK, EUR, HKD, HUF, ILS, JPY, MYR, MXN, TWD, NZD, NOK, PHP, PLN, GBP, SGD, SEK, CHF, THB, USD)."
@@ -213,18 +269,15 @@ To prove that IntentLock is not mere "UI theater", present these failure demonst
 
 ### Failure Scenario 2: Budget Ceiling Breach (Agent Overspending Prevented)
 1. In the Intent form, set **Max Budget** to **$60.00**.
-2. Select a seller offer whose rock-bottom floor price is $66.00.
-3. Start negotiation. The seller agent refuses to drop below $66.00.
-4. If a deal is submitted at $66.00, click **"Verify Deal"**.
+2. Select a seller offer whose floor price is $74.00.
+3. Start negotiation. The seller agent refuses to drop below $74.00.
+4. If a deal is submitted at $74.00, click **"Verify Deal"**.
 5. **Result**: IntentLock blocks the transaction with `REJECTED`:
-   ```
-   "Independently verified total of $66 exceeds user authorized maximum budget ceiling of $60"
-   ```
    *Payment authorization is completely inaccessible.*
 
 ### Failure Scenario 3: Post-Verification Deal Tampering (Cryptographic Tamper Resistance)
-1. Verify a legitimate deal at $68.00.
-2. In the browser console or via an API client (`curl`), attempt to submit a modified deal payload (e.g., price changed to $75.00) using the previously generated `dealId`.
+1. Verify a legitimate deal at $74.00.
+2. In an API client (`curl`), attempt to submit a modified deal payload (e.g., price changed to $80.00) using the previously generated `dealId`.
 3. **Result**: IntentLock recomputes the SHA-256 fingerprint:
    ```json
    {
@@ -232,70 +285,78 @@ To prove that IntentLock is not mere "UI theater", present these failure demonst
      "message": "Transaction rejected: Canonical fingerprint does not match approved deal terms."
    }
    ```
-   *Any prior approval token is instantly invalidated (`REVOKED`).*
+   *Any prior approval token is instantly invalidated (`INVALIDATED`).*
 
 ### Failure Scenario 4: Expired Authorization TTL
 1. Once approved, the approval token carries a strict 15-minute time-to-live (`expiresAt`).
-2. If payment is attempted after expiration:
+2. If checkout initiation is attempted after expiration:
 3. **Result**: PayPal order creation endpoint returns HTTP 400:
    ```json
    {
-     "error": "APPROVAL_TOKEN_EXPIRED",
-     "message": "Authorization token has expired. Please re-verify and approve the deal."
+     "error": "Human approval has expired. Re-verification required."
    }
    ```
-   *No funds can ever be captured under an expired token.*
+   *No checkout can be initiated under an expired token.*
 
 ### Failure Scenario 5: Replay & Double-Spend Prevention
-1. Complete a successful checkout.
-2. Re-send the same checkout request with the already used `approvalToken`.
-3. **Result**: The server rejects the request with HTTP 409 Conflict:
+1. Complete a successful checkout and capture.
+2. Re-send the checkout or capture request with the already used authorization token or order.
+3. **Result**: The server returns the cached completion without creating duplicate orders or captures:
    ```json
    {
-     "error": "TOKEN_ALREADY_CONSUMED",
-     "message": "Authorization token has already been consumed. Replay attempt logged in audit trail."
+     "success": true,
+     "data": {
+       "status": "COMPLETED",
+       "message": "Payment was already captured and completed."
+     }
    }
    ```
 
 ---
 
-## 7. Switching Between Mock and Live Modes
+## 8. Switching Between Mock and Live Modes
 
 ### A. LLM Provider (Buyer & Seller Negotiation)
-- **Mock Mode (Default)**: Set `LLM_PROVIDER=mock`. Uses deterministic state-machine agents with realistic concession curves. Fast, reliable, and zero cost.
-- **OpenAI Live Mode**: Set `LLM_PROVIDER=openai`, `LLM_API_KEY=sk-...`, `LLM_MODEL=gpt-4o-mini`. The buyer and seller agents make live LLM completion requests guarded by system prompts, schema validation, and fallback mechanisms.
+- **Mock Mode (Default)**: Set `LLM_PROVIDER=mock`. Uses deterministic rule-based agents. Fast, reliable, and zero cost.
+- **Groq Live Mode**: Set `LLM_PROVIDER=groq`, `LLM_API_KEY=gsk_...`, `LLM_MODEL=openai/gpt-oss-120b`. The buyer and seller agents make live LLM completion requests guarded by system prompts, schema validation, and fallback mechanisms.
+- **OpenAI Live Mode**: Set `LLM_PROVIDER=openai`, `LLM_API_KEY=sk-...`, `LLM_MODEL=gpt-4o-mini`.
 
 ### B. PayPal Payment Gateway
-- **Mock Sandbox Mode**: Default when `PAYPAL_CLIENT_ID` is unset. Simulates the PayPal order lifecycle with real UUIDs, capture IDs, and HMAC validations.
+- **Mock Sandbox Mode**: Default when `PAYPAL_CLIENT_ID` is unset. Simulates the PayPal order lifecycle with mock IDs and HMAC validations.
 - **Live PayPal Sandbox**: Set `PAYPAL_ENV=sandbox`, `PAYPAL_CLIENT_ID`, and `PAYPAL_CLIENT_SECRET` with valid sandbox credentials from [developer.paypal.com](https://developer.paypal.com). Performs live HTTPS requests to `https://api-m.sandbox.paypal.com`.
 
 ---
 
-## 8. Current Limitations & Production Roadmap
+## 9. Current Disclosures & Production Roadmap
 
-1. **Identity & Authentication Model (Header-Based Prototype)**:
-   - User identity is extracted directly from the client-supplied `x-user-id` or `x-session-id` HTTP header (falling back to `dev-user-default` in development/test when omitted, and requiring the header in production).
-   - **Explicit Limitation**: The application does *not* currently implement independently validated cryptographically signed sessions (such as JWTs or secure HTTP-only session cookies). Consequently, a client can impersonate another user ID simply by setting `x-user-id` or `x-session-id`.
-   - **Implemented Ownership Protection**: Within the resolved user context (`req.user.id`), resource-level ownership validation is strictly and consistently enforced across all endpoints: deals, negotiations, IntentLock verifications, human approvals, PayPal checkout/capture, and audit log access all verify that `deal.userId === req.user.id` (returning HTTP 403 Forbidden on mismatch).
-   - **Production Roadmap**: Production deployments require replacing the client-provided header mechanism with an external identity provider (IdP), OAuth2 / OpenID Connect, or cryptographically signed session cookies.
-2. **Local Persistence**:
-   - Utilizes native Node.js SQLite (`--experimental-sqlite`). In local demo environments, this creates a clean `./data/dealmind.sqlite` file.
-   - *Production Roadmap*: PostgreSQL or CockroachDB with connection pooling for distributed enterprise deployment.
-3. **Simulated Sellers**:
-   - Sellers negotiate using private reservation prices and discount curves; live retail APIs are not called for seller catalog inventory.
+1. **Controlled Demonstration Catalogue**:
+   - Seller offers originate from a curated, controlled demonstration catalogue. Live marketplace scraping is neither claimed nor performed.
+2. **Sandbox Environment Only**:
+   - All payment checkouts execute strictly against the PayPal Sandbox environment (`https://api-m.sandbox.paypal.com`). Production PayPal credentials and live payment capture are strictly prohibited.
+3. **Authentication & Session Tokens**:
+   - Session tokens are minted via `POST /api/auth/session` and verified via HMAC signatures (`Authorization: Bearer <token>`). Arbitrary client identity headers (`x-user-id`/`x-session-id`) are strictly rejected.
+   - *Production Roadmap*: Integrate enterprise OpenID Connect / OAuth2 IdP.
+4. **Local Persistence**:
+   - Utilizes native Node.js SQLite (`--experimental-sqlite`) creating `./data/dealmind.sqlite`.
+   - *Production Roadmap*: PostgreSQL with connection pooling.
 
 ---
 
-## 9. Test Verification Summary
+## 10. Test Verification Summary
 
-The project includes 7 automated test suites verifying all layers of the architecture:
+The project includes 10 automated test suites verifying all layers of the architecture:
 
 | Test Suite | Purpose | Tests |
 |---|---|:---:|
+| `recoveryAudit.test.ts` | Frontend audit trail and recovery persistence | 4 |
 | `businessRules.test.ts` | Intent validation, offer scoring, discount calculations | 8 |
-| `phase2Negotiation.test.ts` | Multi-agent dialogue, counteroffer generation, concession logic | 16 |
 | `phase3SecurityGateway.test.ts` | Canonical hashing, policy verification, replay prevention | 26 |
-| `backendSecurity.test.ts` | Express middleware, IDOR protection, CSRF headers | 24 |
-| `paypalCheckoutSecurity.test.ts` | Order creation, capture, amount/currency matching, token consumption | 33 |
+| `phase2Negotiation.test.ts` | Multi-agent dialogue, counteroffer generation, concession logic | 16 |
 | `llmNegotiationSecurity.test.ts` | Prompt injection defense, schema enforcement, fallback logic | 20 |
+| `recoveryVerification.test.ts` | Hosted checkout URLs, sanitization, capture recovery | 15 |
 | `endToEndDemoHardening.test.ts` | Full lifecycle, refresh recovery, tampering, timeout handling | 11 |
+| `backendSecurity.test.ts` | Express middleware, IDOR protection, session auth | 24 |
+| `securityHardeningAudit.test.ts` | Cross-user isolation, token hashing, state tampering | 20 |
+| `paypalCheckoutSecurity.test.ts` | Order creation, capture, amount/currency matching, token consumption | 38 |
+| **Total Test Cases** | **Full Workspace Verification** | **182 Passed** |
+| **Backend Total** | **Server Test Suites (6 suites)** | **128 Passed** |

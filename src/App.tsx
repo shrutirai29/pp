@@ -15,8 +15,9 @@ import { rankOffers } from './lib/dealScoring';
 import { ApprovalManager } from './lib/intentlock/approvalManager';
 import { dealmindApi } from './lib/api/client';
 
-import { Navbar, NavView } from './components/layout/Navbar';
-import { Footer } from './components/layout/Footer';
+import { NavView } from './components/layout/Navbar';
+import { Sidebar } from './components/layout/Sidebar';
+import { TopHeader } from './components/layout/TopHeader';
 import { DashboardPage } from './pages/DashboardPage';
 import { FindDealPage } from './pages/FindDealPage';
 import { DealWorkspacePage } from './pages/DealWorkspacePage';
@@ -26,6 +27,7 @@ import { AuditTrailPage } from './pages/AuditTrailPage';
 
 export function App() {
   const [currentView, setCurrentView] = useState<NavView>('dashboard');
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [deals, setDeals] = useState<Deal[]>(MOCK_DASHBOARD_DEALS);
   const [activeIntent, setActiveIntent] = useState<UserIntent>(DEFAULT_EXAMPLE_INTENT);
   
@@ -634,90 +636,98 @@ export function App() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-navy-950 text-slate-100">
-      {/* Top Navbar */}
-      <Navbar
+    <div className="min-h-screen bg-[#15152B] text-white flex">
+      {/* Fixed Left Sidebar Navigation */}
+      <Sidebar
         currentView={currentView}
         onNavigate={setCurrentView}
         activeDealTitle={activeIntent.productTitle}
         isDealActive={true}
-        isServerOnline={isServerOnline}
+        isOpen={isMobileSidebarOpen}
+        onClose={() => setIsMobileSidebarOpen(false)}
       />
 
-      {/* Main Content View Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {currentView === 'dashboard' && (
-          <DashboardPage
-            deals={deals}
-            onSelectDeal={handleSelectDeal}
-            onNewDeal={() => setCurrentView('find-deal')}
-            onViewAudit={() => setCurrentView('audit')}
-          />
-        )}
+      {/* Main Content Area (offset by 72 (18rem) on lg screens) */}
+      <div className="flex-1 lg:pl-72 flex flex-col min-h-screen w-full">
+        {/* Top Header */}
+        <TopHeader
+          onNewDeal={() => setCurrentView('find-deal')}
+          onToggleSidebar={() => setIsMobileSidebarOpen(true)}
+          isServerOnline={isServerOnline}
+        />
 
-        {currentView === 'find-deal' && (
-          <FindDealPage
-            onSubmit={handleIntentSubmit}
-            onCancel={() => setCurrentView('dashboard')}
-          />
-        )}
+        {/* View Content Container */}
+        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {currentView === 'dashboard' && (
+            <DashboardPage
+              deals={deals}
+              onSelectDeal={handleSelectDeal}
+              onNewDeal={() => setCurrentView('find-deal')}
+              onViewAudit={() => setCurrentView('audit')}
+            />
+          )}
 
-        {currentView === 'workspace' && (
-          <DealWorkspacePage
-            intent={activeIntent}
-            offers={offers}
-            onStartNegotiation={handleStartNegotiation}
-            onEditIntent={() => setCurrentView('find-deal')}
-            onResetOffers={() => {
-              const fresh = rankOffers(SAMPLE_OFFERS, activeIntent).map((s) => s.offer);
-              setOffers(fresh);
-            }}
-          />
-        )}
+          {currentView === 'find-deal' && (
+            <FindDealPage
+              onSubmit={handleIntentSubmit}
+              onCancel={() => setCurrentView('dashboard')}
+            />
+          )}
 
-        {currentView === 'negotiation' && negotiationSession && selectedOffer && (
-          <NegotiationPage
-            session={negotiationSession}
-            intent={activeIntent}
-            offer={selectedOffer}
-            engineMode={negotiationResult?.engineMode}
-            providerName={negotiationResult?.providerName}
-            modelName={negotiationResult?.modelName}
-            fallbackReason={negotiationFallbackReason}
-            isNegotiating={isNegotiating}
-            onProceedToVerification={handleProceedToVerification}
-            onBackToWorkspace={() => setCurrentView('workspace')}
-            onReRunNegotiation={handleReRunNegotiation}
-          />
-        )}
+          {currentView === 'workspace' && (
+            <DealWorkspacePage
+              intent={activeIntent}
+              offers={offers}
+              onStartNegotiation={handleStartNegotiation}
+              onEditIntent={() => setCurrentView('find-deal')}
+              onResetOffers={() => {
+                const fresh = rankOffers(SAMPLE_OFFERS, activeIntent).map((s) => s.offer);
+                setOffers(fresh);
+              }}
+            />
+          )}
 
-        {currentView === 'intentlock' && verificationReport && (
-          <VerificationPage
-            report={verificationReport}
-            intent={activeIntent}
-            deal={finalDeal || undefined}
-            approvalRecord={approvalRecord}
-            onApprove={handleUserApprove}
-            onDecline={handleUserDecline}
-            authorizationToken={authorizationToken}
-            isServerOnline={isServerOnline}
-            onReturnToNegotiation={() => setCurrentView('negotiation')}
-            onReturnToWorkspace={() => setCurrentView('workspace')}
-            onPaymentSuccess={handlePaymentSuccess}
-          />
-        )}
+          {currentView === 'negotiation' && negotiationSession && selectedOffer && (
+            <NegotiationPage
+              session={negotiationSession}
+              intent={activeIntent}
+              offer={selectedOffer}
+              engineMode={negotiationResult?.engineMode}
+              providerName={negotiationResult?.providerName}
+              modelName={negotiationResult?.modelName}
+              fallbackReason={negotiationFallbackReason}
+              isNegotiating={isNegotiating}
+              onProceedToVerification={handleProceedToVerification}
+              onBackToWorkspace={() => setCurrentView('workspace')}
+              onReRunNegotiation={handleReRunNegotiation}
+            />
+          )}
 
-        {currentView === 'audit' && (
-          <AuditTrailPage
-            events={auditEvents}
-            onResetEvents={handleResetAuditEvents}
-            onBackToDashboard={() => setCurrentView('dashboard')}
-          />
-        )}
-      </main>
+          {currentView === 'intentlock' && verificationReport && (
+            <VerificationPage
+              report={verificationReport}
+              intent={activeIntent}
+              deal={finalDeal || undefined}
+              approvalRecord={approvalRecord}
+              onApprove={handleUserApprove}
+              onDecline={handleUserDecline}
+              authorizationToken={authorizationToken}
+              isServerOnline={isServerOnline}
+              onReturnToNegotiation={() => setCurrentView('negotiation')}
+              onReturnToWorkspace={() => setCurrentView('workspace')}
+              onPaymentSuccess={handlePaymentSuccess}
+            />
+          )}
 
-      {/* App Footer */}
-      <Footer />
+          {currentView === 'audit' && (
+            <AuditTrailPage
+              events={auditEvents}
+              onResetEvents={handleResetAuditEvents}
+              onBackToDashboard={() => setCurrentView('dashboard')}
+            />
+          )}
+        </main>
+      </div>
     </div>
   );
 }

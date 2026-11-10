@@ -12,6 +12,8 @@ export interface PayPalOrderParams {
   amount: number;
   currency: string;
   idempotencyKey?: string;
+  returnUrl?: string;
+  cancelUrl?: string;
 }
 
 export interface PayPalOrderResult {
@@ -47,7 +49,9 @@ export class HttpPayPalClient implements PayPalClient {
   constructor(
     private clientId: string,
     private clientSecret: string,
-    private baseUrl: string = 'https://api-m.sandbox.paypal.com'
+    private baseUrl: string = 'https://api-m.sandbox.paypal.com',
+    private defaultReturnUrl: string = 'http://localhost:5173',
+    private defaultCancelUrl: string = 'http://localhost:5173'
   ) {
     // Fail safely if a production PayPal endpoint is configured for this demo
     if (this.baseUrl.includes('api-m.paypal.com') && !this.baseUrl.includes('sandbox')) {
@@ -122,6 +126,9 @@ export class HttpPayPalClient implements PayPalClient {
       ? Math.round(params.amount).toString()
       : params.amount.toFixed(2);
 
+    const returnUrl = params.returnUrl || this.defaultReturnUrl;
+    const cancelUrl = params.cancelUrl || this.defaultCancelUrl;
+
     const payload = {
       intent: 'CAPTURE',
       purchase_units: [
@@ -139,6 +146,8 @@ export class HttpPayPalClient implements PayPalClient {
         brand_name: 'DealMind IntentLock',
         user_action: 'PAY_NOW',
         shipping_preference: 'NO_SHIPPING',
+        return_url: returnUrl,
+        cancel_url: cancelUrl,
       },
     };
 

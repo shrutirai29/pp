@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'danger' | 'ghost';
+export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'danger' | 'ghost' | 'peach';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -24,7 +24,7 @@ export const Button: React.FC<ButtonProps> = ({
   ...props
 }) => {
   const baseClasses =
-    'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-navy-950 disabled:opacity-50 disabled:cursor-not-allowed select-none active:scale-[0.98]';
+    'inline-flex items-center justify-center font-medium rounded-xl transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#15152B] disabled:opacity-50 disabled:cursor-not-allowed select-none active:scale-[0.98]';
 
   const sizeClasses: Record<ButtonSize, string> = {
     sm: 'text-xs px-3 py-1.5 gap-1.5',
@@ -34,15 +34,17 @@ export const Button: React.FC<ButtonProps> = ({
 
   const variantClasses: Record<ButtonVariant, string> = {
     primary:
-      'bg-electric-500 hover:bg-electric-600 text-white shadow-sm shadow-electric-500/20 focus:ring-electric-400 border border-electric-400/30',
+      'bg-[#6955C9] hover:bg-[#5442A8] text-white shadow-sm shadow-[#6955C9]/20 focus:ring-[#8F86D8] border border-[#6955C9]/40',
     secondary:
-      'bg-navy-800 hover:bg-navy-700 text-slate-200 border border-navy-700/80 focus:ring-navy-600',
+      'bg-[#24203D] hover:bg-[#322C54] text-white border border-[#24203D] focus:ring-[#6955C9]',
     outline:
-      'bg-transparent hover:bg-navy-850 text-slate-300 border border-navy-700 hover:border-slate-600 focus:ring-navy-600',
+      'bg-transparent hover:bg-[#24203D] text-[#E9E8F8] border border-[#24203D] hover:border-[#6955C9]/40 focus:ring-[#6955C9]',
     danger:
-      'bg-rose-600/90 hover:bg-rose-700 text-white shadow-sm shadow-rose-900/30 focus:ring-rose-500 border border-rose-500/30',
+      'bg-[#D97D68] hover:bg-[#C26B57] text-white shadow-sm shadow-[#D97D68]/20 focus:ring-[#D97D68] border border-[#D97D68]/40',
     ghost:
-      'bg-transparent hover:bg-navy-850/60 text-slate-400 hover:text-slate-200 border border-transparent focus:ring-navy-700',
+      'bg-transparent hover:bg-[#24203D]/60 text-[#68657A] hover:text-white border border-transparent focus:ring-[#24203D]',
+    peach:
+      'bg-[#F5B69E] hover:bg-[#F8D0BE] text-[#15152B] font-semibold shadow-sm shadow-[#F5B69E]/20 focus:ring-[#F5B69E] border border-[#F5B69E]/30',
   };
 
   return (

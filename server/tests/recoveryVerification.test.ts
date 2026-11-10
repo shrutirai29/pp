@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import request from 'supertest';
 import { DatabaseSync } from '../src/db/sqliteAdapter.js';
 import { initDatabase } from '../src/db/database.js';
@@ -6,7 +6,7 @@ import { createApp } from '../src/app.js';
 import { EnvConfig } from '../src/config/env.js';
 import { UserIntent, FinalDeal } from '../src/schemas/dealSchemas.js';
 import { authHeader, TEST_SECRET } from './authTestHelper.js';
-import { PayPalClient, PayPalOrderParams, PayPalOrderResult, PayPalCaptureResult } from '../src/services/paypalClient.js';
+import { PayPalClient, PayPalOrderParams, PayPalOrderResult, PayPalCaptureResult, HttpPayPalClient } from '../src/services/paypalClient.js';
 import { MockLLMProvider } from '../src/llm/mockProvider.js';
 import { OpenAICompatibleProvider } from '../src/llm/openaiProvider.js';
 import { NegotiationCoordinator } from '../src/services/negotiation/negotiationCoordinator.js';
@@ -445,6 +445,114 @@ describe('Recovery Verification Suite: Idempotency, Model Transparency, & Reconc
       expect(res.status).toBe(403);
       expect(res.body.success).toBe(false);
       expect(res.body.error).toMatch(/Unauthorized/i);
+    });
+  });
+
+  describe('4. PayPal Hosted Checkout Return/Cancel URL and Secret Sanitization Verification', () => {
+    it('4.1 HttpPayPalClient includes return_url, cancel_url, intent, custom_id, and amount in order payload', async () => {
+      let capturedUrl = '';
+      let capturedBody: any = null;
+
+      const client = new HttpPayPalClient(
+        'mock_client_id_test',
+        'mock_secret_test_xyz',
+        'https://api-m.sandbox.paypal.com',
+        'http://localhost:5173/return',
+        'http://localhost:5173/cancel'
+      );
+
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn(async (url: any, init: any) => {
+        const urlStr = String(url);
+        if (urlStr.includes('/v1/oauth2/token')) {
+          return new Response(JSON.stringify({ access_token: 'fake_access_token_123', expires_in: 3600 }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (urlStr.includes('/v2/checkout/orders')) {
+          capturedUrl = urlStr;
+          capturedBody = JSON.parse(init.body);
+          return new Response(
+            JSON.stringify({
+              id: '7C_TEST_ORDER_123',
+              status: 'CREATED',
+              links: [{ rel: 'approve', href: 'https://www.sandbox.paypal.com/checkoutnow?token=7C_TEST_ORDER_123' }],
+            }),
+            { status: 201, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        return new Response('{}', { status: 200 });
+      }) as any;
+
+      try {
+        const result = await client.createOrder({
+          dealId: 'intent_1793891217448',
+          referenceId: 'DM-intent_179389121',
+          description: 'DealMind: Samsung 980 1TB SSD',
+          amount: 74,
+          currency: 'USD',
+        });
+
+        expect(result.id).toBe('7C_TEST_ORDER_123');
+        expect(capturedUrl).toBe('https://api-m.sandbox.paypal.com/v2/checkout/orders');
+        expect(capturedBody).toBeDefined();
+        expect(capturedBody.intent).toBe('CAPTURE');
+        expect(capturedBody.purchase_units[0].amount.currency_code).toBe('USD');
+        expect(capturedBody.purchase_units[0].amount.value).toBe('74.00');
+        expect(capturedBody.purchase_units[0].custom_id).toBe('intent_1793891217448');
+        expect(capturedBody.purchase_units[0].reference_id).toBe('DM-intent_179389121');
+        expect(capturedBody.application_context.return_url).toBe('http://localhost:5173/return');
+        expect(capturedBody.application_context.cancel_url).toBe('http://localhost:5173/cancel');
+        expect(capturedBody.application_context.user_action).toBe('PAY_NOW');
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('4.2 HttpPayPalClient error handling strictly redacts client ID, secret, and bearer tokens', async () => {
+      const client = new HttpPayPalClient(
+        'super_secret_client_id_999',
+        'super_secret_key_888',
+        'https://api-m.sandbox.paypal.com'
+      );
+
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn(async () => {
+        return new Response(
+          'Error details containing super_secret_key_888 and super_secret_client_id_999 and Bearer secret_token_xyz',
+          { status: 401 }
+        );
+      }) as any;
+
+      try {
+        await expect(
+          client.createOrder({
+            dealId: 'd-test',
+            referenceId: 'ref-test',
+            description: 'Test order',
+            amount: 74,
+            currency: 'USD',
+          })
+        ).rejects.toThrow();
+
+        try {
+          await client.createOrder({
+            dealId: 'd-test',
+            referenceId: 'ref-test',
+            description: 'Test order',
+            amount: 74,
+            currency: 'USD',
+          });
+        } catch (err: any) {
+          expect(err.message).not.toContain('super_secret_client_id_999');
+          expect(err.message).not.toContain('super_secret_key_888');
+          expect(err.message).not.toContain('secret_token_xyz');
+          expect(err.message).toContain('***REDACTED');
+        }
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
     });
   });
 });

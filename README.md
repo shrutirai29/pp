@@ -1,290 +1,284 @@
-# DealMind + IntentLock: Autonomous Deal Agent & PayPal Sandbox Security Gateway
+# DealMind + IntentLock™: Autonomous Deal Agent & PayPal Sandbox Security Gateway
 
-> **Phase 5: PayPal Sandbox Integration with IntentLock-Enforced Checkout**  
+> **Autonomous AI Commerce Protected by Independent Cryptographic Verification and Explicit Human Authorization**  
 > Built for the PayPal AI Commerce & Transaction Security Hackathon.
 
-DealMind is an autonomous shopping and negotiation agent designed to evaluate real-time product offers, rank eligible merchant bids, and negotiate pricing and fulfillment terms on behalf of buyers. To ensure safety and compliance, DealMind is paired with **IntentLock™**—an independent, server-enforced transaction security gateway that audits the complete seller-approved final deal against the buyer's original non-negotiable intent before payment can be authorized.
+---
 
-In Phase 5, DealMind integrates **PayPal Sandbox Checkout** via the official PayPal Orders API v2, with backend-enforced IntentLock verification gates that cannot be bypassed by the client.
+## 1. Problem Statement
+
+Autonomous AI shopping and procurement agents promise to revolutionize commerce by finding deals, evaluating merchant terms, and negotiating pricing without manual effort. However, granting autonomous AI agents direct access to payment gateways creates severe security risks:
+
+- **Agent Drift & Hallucination**: AI agents may accept terms that violate user constraints (e.g. paying above budget, accepting hidden subscriptions, or waiving warranty protection).
+- **Prompt Injection & Adversarial Sellers**: Malicious sellers can craft prompt-injection attacks that deceive buyer agents into agreeing to unfavorable conditions.
+- **Unauthorized Payments & Double-Spending**: Without an out-of-band verification boundary, an agent can authorize irreversible payments without explicit human consent.
+
+**DealMind + IntentLock™ solves this fundamental safety challenge.**
+
+---
+
+## 2. DealMind vs. IntentLock™
+
+| Capability | DealMind (Negotiation Agent) | IntentLock™ (Security Gateway) |
+|---|---|---|
+| **Primary Role** | Market Discovery & Autonomous Negotiation | Zero-Trust Verification & Payment Gatekeeper |
+| **Authority** | Proposes and discusses candidate agreements | Holds exclusive authority to permit payment |
+| **Logic** | Multi-agent dialogue (Groq LLM / heuristics) | Independent 9-criteria deterministic audit |
+| **Cryptographic Role** | Formats final deal terms | Computes SHA-256 contract fingerprint & signs tokens |
+| **Human Approval** | Presents deal report to user | Issues HMAC-signed single-use authorization token |
+| **Payment Integration** | Does not touch payment credentials | Governs PayPal order creation & capture |
+| **Failure Mode** | May stall or propose bad terms | **Blocks transaction instantly** before checkout |
+
+---
+
+## 3. System Architecture & Transaction Flow
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                         React 18 Fintech Frontend                        │
+│    Left Sidebar · Modern Data Table · Dynamic Intent Form · Audit Panel   │
+└────────────────────────────────────┬─────────────────────────────────────┘
+                                     │ (REST API + HMAC Session Tokens)
+                                     ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│                      Express Backend (Node.js 24)                        │
+│                                                                          │
+│  ┌───────────────────────┐                  ┌─────────────────────────┐  │
+│  │   Autonomous Multi-   │                  │   IntentLock Gateway    │  │
+│  │     Agent Engine      │                  │   - 9-Criteria Audit    │  │
+│  │ - Groq / Heuristics   │ ──(Final Deal)──►│   - SHA-256 Fingerprint │  │
+│  │ - Bilateral Dialogue  │                  │   - Tamper Detection    │  │
+│  └───────────────────────┘                  └────────────┬────────────┘  │
+│                                                          │               │
+│                                                          ▼               │
+│  ┌───────────────────────┐                  ┌─────────────────────────┐  │
+│  │    Audit Repository   │                  │  Human Approval Gate    │  │
+│  │ - Immutable SQLite    │◄─────────────────│  - 15-Min TTL Window    │  │
+│  │ - Tamper-Evident Logs │                  │  - HMAC Single-Use Token│  │
+│  └───────────────────────┘                  └────────────┬────────────┘  │
+│                                                          │               │
+│                                                          ▼               │
+│                                             ┌─────────────────────────┐  │
+│                                             │    Payment Service      │  │
+│                                             │  - Currency Allowlist   │  │
+│                                             │  - Exact Amount Match   │  │
+│                                             │  - Atomic Token Consume │  │
+│                                             └────────────┬────────────┘  │
+└──────────────────────────────────────────────────────────┼───────────────┘
+                                                           │ (REST v2)
+                                                           ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│                       PayPal Sandbox Gateway                             │
+│   - Order Creation (`/v2/checkout/orders` with Return/Cancel URLs)       │
+│   - Hosted Checkout Buyer Approval (`https://www.sandbox.paypal.com`)    │
+│   - Authoritative Server Capture (`/v2/checkout/orders/{id}/capture`)    │
+│   - Idempotency & Reconciliation (`PayPal-Request-Id`)                   │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 4. Key Security & Functional Capabilities
+
+### A. Groq-Powered Multi-Agent Negotiation
+- **Provider**: Live Groq API (`openai/gpt-oss-120b`) with fast, low-latency completions.
+- **Bilateral Dialogue**: Buyer Agent negotiates against Seller Agent across multi-round proposals with concession curves, budget constraints, and warranty requirements.
+- **Deterministic Fallback**: If external LLM APIs are offline, DealMind seamlessly falls back to a deterministic rule-based heuristic policy without stalling.
+
+### B. Independent 9-Criteria IntentLock Verification
+Before payment checkout can be initiated, IntentLock recalculates and verifies all 9 transaction invariants:
+1. **Transaction Status**: Validates bilateral agreement (`agreed: true`).
+2. **Currency Invariance**: Strictly checks that deal currency matches user intent (`USD`).
+3. **Product Integrity**: Verifies exact product specification and identifier match.
+4. **Condition Compliance**: Confirms hardware condition matches requirement (`new`).
+5. **Budget Ceiling**: Strictly proves total payable $\le$ buyer budget ceiling (with exact zero-tolerance minor-unit arithmetic).
+6. **Delivery Window**: Fulfillment days $\le$ user requirement.
+7. **No Subscriptions**: Confirms one-time purchase with zero recurring subscriptions.
+8. **Itemized Ancillary Fees**: Audits base price, shipping fees, and taxes with zero undeclared fees.
+9. **Warranty Coverage**: Validates warranty term $\ge$ user requirement.
+
+### C. Cryptographic Contract Fingerprint & Tamper Resistance
+IntentLock canonicalizes the agreed terms into a deterministic JSON representation and computes a **SHA-256 hash** (`dealFingerprint`). If any term (price, seller, warranty) is modified in transit or after verification, the fingerprint mismatches and the transaction is permanently revoked.
+
+### D. Explicit Human Approval & Single-Use Authorization Token
+- Deals cannot be checked out automatically. An explicit human signature is mandatory.
+- Upon approval, the server mints an **HMAC-SHA256 authorization token** with a 15-minute time-to-live (`APPROVAL_VALIDITY_SECONDS=900`).
+- The authorization token is strictly single-use and atomically transitioned to `CONSUMED` upon payment capture.
+
+### E. PayPal Sandbox Order Creation with Hosted Checkout Safety
+- Creates orders via PayPal Orders API v2 (`CAPTURE` intent).
+- Strictly passes `return_url` and `cancel_url` in `application_context` to ensure the PayPal hosted checkout portal renders without error.
+- Enforces an allowlist of 24 supported PayPal currencies (rejecting unsupported currencies like `INR` upfront).
+
+### F. Authoritative Server Capture & Atomic Token Consumption
+- After the buyer approves payment in the PayPal Sandbox portal, the backend issues an authoritative server-side capture (`POST /v2/checkout/orders/{id}/capture`).
+- Validates that captured amount and currency match approved deal terms exactly.
+- Atomically consumes the authorization token and transitions the deal to `payment_completed`.
+
+### G. Idempotency & Reconciliation
+- Re-executing checkout or capture with an existing completed order returns the completed record without secondary charges or duplicate orders.
+- Dedicated reconciliation endpoint (`POST /api/deals/:id/reconcile`) queries PayPal and syncs state safely.
+
+---
+
+## 5. Verified Live PayPal Sandbox Transaction
+
+The full lifecycle was verified end-to-end against live PayPal Sandbox APIs:
+
+```text
+Product:             Samsung 980 1TB PCIe 3.0 NVMe M.2 Internal SSD
+Seller:              TechHaven Direct
+Deal ID:             intent_1793891217448
+Buyer Budget:        $85.00 USD
+Agreed Price:        $74.00 USD
+IntentLock Status:   VERIFIED (9/9 passed)
+Contract Fingerprint:bcceecd365a58b4354218991e2f405a9b5d0e2aaa4134cef74129cd02460f2de
+PayPal Order ID:     7M922293E62170201
+PayPal Capture ID:   12P5471025765970Y
+PayPal Order Status: COMPLETED
+Capture Status:      COMPLETED (Gross: $74.00 USD, Fee: $3.76, Net: $70.24)
+Authorization Token: CONSUMED
+Deal Status:         payment_completed
+```
+
+---
+
+## 6. Disclosures & Sandbox Notice
 
 > [!IMPORTANT]
-> **SANDBOX ENVIRONMENT NOTICE & PCI DISCLAIMER:**  
-> This project is configured strictly for the **PayPal Sandbox** developer environment (`https://api-m.sandbox.paypal.com`). It does NOT handle real credit cards, process live payments, or establish PCI-DSS certification. Never enter real financial or production credentials.
+> **1. Controlled Demonstration Catalogue**:  
+> Seller offers originate from a curated, controlled demonstration catalogue. Live marketplace scraping is neither claimed nor performed.
+>
+> **2. Sandbox Environment Only**:  
+> All payment interactions run strictly in the **PayPal Sandbox** developer environment (`https://api-m.sandbox.paypal.com`). Production PayPal credentials and live card processing are strictly prohibited.
+>
+> **3. Authentication Model**:  
+> The backend implements cryptographically signed session tokens via `POST /api/auth/session` using HMAC-SHA256 (`Authorization: Bearer <token>`). Arbitrary client headers (`x-user-id`) are untrusted and rejected.
 
 ---
 
-## 1. Architecture Overview & IntentLock Gate
+## 7. Setup & Installation
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        DealMind React 18 Frontend                      │
-│   - Natural Language Buyer Criteria Capture                            │
-│   - Autonomous Multi-Agent Negotiation Simulation                      │
-│   - IntentLock Security Verdict & SHA-256 Fingerprint Display          │
-│   - PayPal Sandbox Checkout Interface (Buttons & Modal)                │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │ (REST API with x-user-id isolation)
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                   Secure Express Backend (Node.js 24)                  │
-│                                                                        │
-│  ┌───────────────────────┐          ┌───────────────────────────────┐  │
-│  │ IntentLock Policy     │          │ Cryptographic Integrity       │  │
-│  │ Engine (9 Checks)     │          │ (SHA-256 Fingerprint + HMAC)  │  │
-│  └───────────┬───────────┘          └───────────────┬───────────────┘  │
-│              │                                      │                  │
-│              └──────────────────┐ ┌─────────────────┘                  │
-│                                 ▼ ▼                                    │
-│                     ┌───────────────────────────┐                      │
-│                     │ Dedicated Payment Service │                      │
-│                     │ - Validates Deal & Report │                      │
-│                     │ - Enforces Human Approval │                      │
-│                     │ - Authoritative Amount    │                      │
-│                     │ - Atomic Token Consume    │                      │
-│                     └─────────────┬─────────────┘                      │
-└───────────────────────────────────┼────────────────────────────────────┘
-                                    │ (Server-to-Server REST v2)
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                       PayPal Sandbox Gateway API                       │
-│   - OAuth 2.0 Token Generation (`/v1/oauth2/token`)                    │
-│   - Orders API Order Creation (`/v2/checkout/orders`)                  │
-│   - Orders API Server Capture (`/v2/checkout/orders/{id}/capture`)     │
-│   - Idempotency & Reconciliation (`PayPal-Request-Id`)                 │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │ (ACID WAL Persistence)
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                       SQLite Persistent Storage                        │
-│   - deals (Intent & Final Contract JSON)                               │
-│   - verification_reports (Fingerprints, Checks & Status)               │
-│   - approvals (Approval State Machine, Token Hashes & 15m TTL)         │
-│   - payments (Orders, Captures, Idempotency & State Machine)           │
-│   - audit_events (Append-Only Cryptographic Event Log)                 │
-└────────────────────────────────────────────────────────────────────────┘
+### Prerequisites
+- Node.js `v22.x` or `v24.x` (native Node.js `--experimental-sqlite` required)
+- npm `v10+`
+
+### Installation
+```bash
+# Clone the repository
+git clone https://github.com/shrutirai29/pp.git
+cd pp
+
+# Install root & frontend dependencies
+npm install
+
+# Install backend dependencies
+npm --prefix server install
 ```
 
----
-
-## 2. Payment Sequence & Security Gates
-
-```
-Buyer             DealMind Frontend             Express Backend            IntentLock Engine         PayPal Sandbox API
-  │                      │                             │                           │                         │
-  │── 1. Request Deal ──►│                             │                           │                         │
-  │   Negotiation        │                             │                           │                         │
-  │                      │── 2. Run Autonomous Neg ───►│                           │                         │
-  │                      │   (FinalDeal agreed)        │                           │                         │
-  │                      │                             │── 3. Run Policy Checks ──►│                         │
-  │                      │                             │◄─ 4. Report & Fingerprint─│                         │
-  │                      │◄─ 5. Return Report ─────────│                           │                         │
-  │                      │                             │                           │                         │
-  │── 6. Explicit Human ─►│                             │                           │                         │
-  │   Approval Request   │── 7. POST /deals/:id/approve│                           │                         │
-  │                      │                             │── 8. Re-verify terms ────►│                         │
-  │                      │                             │   (Issue HMAC token)      │                         │
-  │                      │◄─ 9. Authorization Token ───│                           │                         │
-  │                      │                             │                           │                         │
-  │── 10. Click Checkout ─►│                             │                           │                         │
-  │   (PayPal Sandbox)   │── 11. POST /deals/:id/checkout                          │                         │
-  │                      │       (token supplied) ────►│                           │                         │
-  │                      │                             │── 12. Enforce 7 Gates ───►│                         │
-  │                      │                             │   (Status=APPROVED,       │                         │
-  │                      │                             │    TTL valid, no tamper)  │                         │
-  │                      │                             │                           │                         │
-  │                      │                             │── 13. Create Order ────────────────────────────────►│
-  │                      │                             │   (Authoritative amount)  │                         │
-  │                      │                             │◄─ 14. Order ID (CREATED) ───────────────────────────│
-  │                      │◄─ 15. Return Order ID ──────│                           │                         │
-  │                      │                             │                           │                         │
-  │── 16. Approve Modal ─►│                             │                           │                         │
-  │   in PayPal UI       │── 17. POST /deals/:id/capture                           │                         │
-  │                      │       (orderId) ───────────►│                           │                         │
-  │                      │                             │── 18. Atomic lock state ─►│                         │
-  │                      │                             │   (CAPTURE_PENDING)       │                         │
-  │                      │                             │── 19. Capture Order ───────────────────────────────►│
-  │                      │                             │◄─ 20. Capture COMPLETED ────────────────────────────│
-  │                      │                             │── 21. Atomically consume token in SQLite ───────────│
-  │                      │                             │── 22. Record immutable audit event ─────────────────│
-  │                      │◄─ 23. Confirmed Outcome ────│                           │                         │
-  │                      │                             │                           │                         │
-  │◄─ 24. Show Confirmed ─│                             │                           │                         │
-  │   Receipt & Capture  │                             │                           │                         │
-```
-
----
-
-## 3. IntentLock's Role in Payment Authorization
-
-IntentLock enforces strict authorization invariants before any PayPal call can be initiated:
-
-1. **Independent Verification Clearance:** The backend verifies that the deal holds a `VERIFIED` verification report from the server policy engine. Unverified or rejected deals are blocked (`HTTP 400`).
-2. **Post-Verification Term Integrity:** The server re-computes the SHA-256 contract fingerprint over all security terms. If the merchant or client modified pricing, delivery, condition, warranty, or fees after verification, checkout is immediately blocked (`HTTP 400`).
-3. **Explicit Human Approval Gate:** Autonomous buyer agents cannot approve transactions. A valid human approval record with status `APPROVED` must exist.
-4. **Approval Expiration (15-Minute TTL):** Approvals automatically expire after 15 minutes. Expired approvals are transitioned to `EXPIRED` and cannot initiate payment.
-5. **Authoritative Amount & Currency:** The amount and currency sent to PayPal are read strictly from the server-persisted contract record (`deal.finalDeal.totalPayable` and `deal.intent.currency`). Client-supplied amounts are ignored.
-6. **Atomic Single-Use Token Consumption:** Upon successful capture, the authorization token is atomically marked `CONSUMED` in SQLite using conditional concurrency locks (`WHERE status = 'APPROVED'`).
-7. **Replay & Double-Capture Guard:** A completed payment record prevents subsequent checkout requests for the same deal. Repeated capture requests return the existing completed receipt without duplicating capture calls to PayPal.
-8. **Fail-Closed Offline Mode:** If the backend is unavailable or client fallback is active, payment operations fail closed immediately. Client-side simulation cannot authorize or create PayPal orders.
-
----
-
-## 4. Payment State Machine
-
-The SQLite `payments` table tracks transactions through a formal state machine:
-
-| State | Description | Permitted Next States |
-| :--- | :--- | :--- |
-| `NOT_STARTED` | Initial pre-checkout state | `ORDER_CREATED` |
-| `ORDER_CREATED` | Order created with PayPal Sandbox API; awaiting buyer confirmation | `BUYER_APPROVED`, `CANCELLED`, `FAILED` |
-| `BUYER_APPROVED` | Buyer completed authentication in PayPal Sandbox interface | `CAPTURE_PENDING`, `CANCELLED` |
-| `CAPTURE_PENDING` | Capture request in-flight to PayPal Orders API | `COMPLETED`, `FAILED`, `REQUIRES_RECONCILIATION` |
-| `COMPLETED` | Funds captured; authorization token atomically consumed; final state | *(Terminal State)* |
-| `FAILED` | PayPal reported a rejection or capture failure | `ORDER_CREATED` (Retry) |
-| `CANCELLED` | Buyer cancelled or closed checkout modal | `ORDER_CREATED` (Retry) |
-| `REQUIRES_RECONCILIATION` | Network interruption during capture; probed against PayPal before retry | `COMPLETED`, `FAILED` |
-
----
-
-## 5. PayPal Sandbox Setup & Configuration
-
-### Prerequisites:
-1. Go to the [PayPal Developer Dashboard](https://developer.paypal.com/dashboard/).
-2. Under **Testing Tools > Sandbox Accounts**, ensure you have:
-   - A **Business (Merchant) Account** (to receive payments).
-   - A **Personal (Buyer) Account** (with test funds to simulate purchases).
-3. Under **Apps & Credentials > Sandbox**, create or select an app to obtain:
-   - **Client ID**
-   - **Client Secret**
-
-### Environment Configuration:
-
-Create a `server/.env` file (copied from `server/.env.example`):
-
+### Environment Configuration
+Copy `server/.env.example` to `server/.env`:
 ```bash
 PORT=4000
 NODE_ENV=development
 CORS_ORIGIN=http://localhost:5173
 DATABASE_PATH=data/dealmind.sqlite
 APPROVAL_VALIDITY_SECONDS=900
-TOKEN_HMAC_SECRET=your_server_hmac_signing_secret_here
+TOKEN_HMAC_SECRET=your_secure_hmac_secret_min_32_chars
 
-# PayPal Sandbox Configuration
-PAYPAL_CLIENT_ID=your_sandbox_client_id_here
-PAYPAL_CLIENT_SECRET=your_sandbox_client_secret_here
+# PayPal Sandbox Credentials (from developer.paypal.com)
+PAYPAL_CLIENT_ID=your_sandbox_client_id
+PAYPAL_CLIENT_SECRET=your_sandbox_client_secret
 PAYPAL_ENV=sandbox
 PAYPAL_BASE_URL=https://api-m.sandbox.paypal.com
-```
+PAYPAL_RETURN_URL=http://localhost:5173/verification?paypal=return
+PAYPAL_CANCEL_URL=http://localhost:5173/verification?paypal=cancel
 
-> [!CAUTION]
-> Never commit `.env` files or secrets to source control. Both `.gitignore` and `server/.gitignore` are configured to prevent credential leaks.
+# LLM Provider ('mock' for offline demo, or 'groq' | 'openai')
+LLM_PROVIDER=mock
+LLM_API_KEY=
+LLM_MODEL=openai/gpt-oss-120b
+```
 
 ---
 
-## 6. API Endpoints
+## 8. Verification & Running
+
+### Run Preflight Verification
+```bash
+npm --prefix server run preflight
+```
+
+### Run Tests
+```bash
+# Run backend test suite (128 tests)
+npm --prefix server test
+
+# Run full workspace test suite (182 tests)
+npm test
+```
+
+### Build Frontend & Backend
+```bash
+npm --prefix server run build
+npm run build
+```
+
+### Start Development Servers
+```bash
+# Terminal 1: Backend API on port 4000
+npm --prefix server run dev
+
+# Terminal 2: Frontend on port 5173
+npm run dev
+```
+Open [http://localhost:5173](http://localhost:5173) in your browser.
+
+---
+
+## 9. API Endpoints
 
 | Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/health` | Server health check and uptime probe |
-| `GET` | `/api/config/paypal` | Safe public endpoint returning Sandbox Client ID and environment |
-| `POST` | `/api/deals` | Register or sync deal intent and final deal parameters |
-| `GET` | `/api/deals/:id` | Fetch deal details (enforces user ownership) |
-| `POST` | `/api/deals/:id/verify` | Execute independent server-side IntentLock verification |
-| `POST` | `/api/deals/:id/approval-request` | Create an approval request record with 15-minute TTL |
-| `POST` | `/api/deals/:id/approve` | Explicit human purchase authorization (issues HMAC token) |
-| `POST` | `/api/deals/:id/decline` | Explicit human decline of transaction terms |
-| `POST` | `/api/deals/:id/checkout` | Create PayPal Sandbox order bound to approved deal terms |
-| `POST` | `/api/deals/:id/capture` | Server capture of PayPal order; consumes authorization token |
-| `GET` | `/api/deals/:id/payment` | Fetch persisted payment status and capture details |
-| `POST` | `/api/deals/:id/cancel-payment` | Record buyer cancellation of checkout |
-| `GET` | `/api/deals/:id/audit` | Fetch append-only audit trail records |
+|---|---|---|
+| `POST` | `/api/auth/session` | Mint signed HMAC session token |
+| `GET` | `/api/deals` | List user deals |
+| `POST` | `/api/deals` | Create purchase intent and deal draft |
+| `GET` | `/api/deals/:id` | Get deal details, latest report, and approvals |
+| `POST` | `/api/deals/:id/negotiate` | Execute bilateral multi-agent negotiation |
+| `POST` | `/api/deals/:id/verify` | Run independent 9-check IntentLock audit |
+| `POST` | `/api/deals/:id/approval-request` | Create human approval request (15-min TTL) |
+| `POST` | `/api/deals/:id/approve` | Explicit human approval signature & token minting |
+| `POST` | `/api/deals/:id/decline` | Decline deal terms |
+| `POST` | `/api/deals/:id/checkout` | Create PayPal Sandbox order bound to fingerprint |
+| `POST` | `/api/deals/:id/capture` | Authoritative server capture of approved PayPal order |
+| `POST` | `/api/deals/:id/reconcile` | Reconcile payment status against PayPal API |
+| `POST` | `/api/deals/:id/cancel-payment` | Safely cancel active payment to allow recovery |
+| `GET` | `/api/deals/:id/audit-trail` | Fetch immutable hash-chained audit event ledger |
+| `GET` | `/api/preflight` | Server and gateway configuration diagnostics |
 
 ---
 
-## 7. Running the Application Locally
+## 10. Test Suites Summary
 
-```powershell
-# 1. Install root & server dependencies
-npm install
-cd server && npm install && cd ..
+The codebase includes **182 automated tests** across 10 suites:
 
-# 2. Run all 98 automated unit and integration tests
-npm test
-
-# 3. Start the Express backend server (Port 4000)
-npm run server
-
-# 4. In a separate terminal, start the Vite frontend (Port 5173)
-npm run dev
-# Open http://localhost:5173
-```
-
-### Dedicated Commands:
-
-```powershell
-# Run backend security & PayPal test suites only
-npm run server:test
-
-# Compile backend TypeScript
-npm run server:build
-
-# Build both frontend and backend for production
-npm run build:all
-```
+| Suite | Purpose | Count |
+|---|---|:---:|
+| `server/tests/paypalCheckoutSecurity.test.ts` | PayPal order creation, capture, amount/currency matching, token consumption | 38 |
+| `server/tests/backendSecurity.test.ts` | Express middleware, session auth, IDOR, input sanitization | 24 |
+| `server/tests/securityHardeningAudit.test.ts` | Cross-user isolation, token hashing, state tampering | 20 |
+| `server/tests/llmNegotiationSecurity.test.ts` | Prompt injection defense, schema enforcement, fallback logic | 20 |
+| `server/tests/recoveryVerification.test.ts` | Hosted checkout URLs, sanitization, capture recovery | 15 |
+| `server/tests/endToEndDemoHardening.test.ts` | Full lifecycle, refresh recovery, tampering, timeout handling | 11 |
+| `src/lib/__tests__/phase3SecurityGateway.test.ts` | Canonical hashing, policy verification, replay prevention | 26 |
+| `src/lib/__tests__/phase2Negotiation.test.ts` | Multi-agent dialogue, counteroffer generation, concession logic | 16 |
+| `src/lib/__tests__/businessRules.test.ts` | Intent validation, offer scoring, discount calculations | 8 |
+| `src/lib/__tests__/recoveryAudit.test.ts` | Frontend audit trail and recovery persistence | 4 |
+| **Workspace Total** | **Full End-to-End Test Suite** | **182 Passed** |
+| **Backend Total** | **Server Test Suites (6 suites)** | **128 Passed** |
 
 ---
 
-## 8. Automated Test Suite (98 Tests Passing)
+## 11. License
 
-The project includes **98 automated tests** covering all phases:
-
-```
-Test Files  5 passed (5)
-Tests       98 passed (98)
-
-✓ src/lib/__tests__/businessRules.test.ts (8 tests)
-    Phase 1 hard constraint and ranking rules
-✓ src/lib/__tests__/phase2Negotiation.test.ts (16 tests)
-    Phase 2 multi-agent negotiation protocol, round pacing & concessions
-✓ src/lib/__tests__/phase3SecurityGateway.test.ts (26 tests)
-    Phase 3 client gateway, canonical serialization, SHA-256 fingerprinting
-✓ server/tests/backendSecurity.test.ts (24 tests)
-    Phase 4 SQLite persistence, server policy engine, HMAC tokens, atomic consumption
-✓ server/tests/paypalCheckoutSecurity.test.ts (24 tests)
-    Phase 5 PayPal Sandbox integration, security gates & state machine:
-    ✓ 1. Checkout rejected for an unverified deal
-    ✓ 2. Checkout rejected for a rejected deal
-    ✓ 3. Checkout rejected without human approval
-    ✓ 4. Checkout rejected after approval expires
-    ✓ 5. Checkout rejected after approved deal is modified
-    ✓ 6. Checkout rejected for another user's deal
-    ✓ 7. Checkout rejected when authorization token is invalid
-    ✓ 8. Public config endpoint returns safe client config without secrets
-    ✓ 9. Sends authoritative server-persisted amount and currency to PayPal
-    ✓ 10. Persists PayPal order ID and payment record in SQLite database
-    ✓ 11. Capture rejected for an unrelated order ID
-    ✓ 12. Capture rejected for another user's deal
-    ✓ 13. Capture rejected if approval status was declined
-    ✓ 14. Successful capture records COMPLETED status and consumes authorization
-    ✓ 15. GET /api/deals/:id/payment returns accurate persisted payment state
-    ✓ 16. Repeated capture requests do not duplicate capture (idempotency)
-    ✓ 17. Network failure marks REQUIRES_RECONCILIATION and reconciles against PayPal
-    ✓ 18. Cancelled checkout records CANCELLED state
-    ✓ 19. Audit events are persisted for order creation and capture
-    ✓ 20. Completed payment cannot create another checkout order for same deal
-    ✓ 21. User cannot view another user's payment records
-    ✓ 22. Missing or malformed PayPal configuration produces a safe error
-    ✓ 23. HttpPayPalClient sanitizes client secrets from any error messages
-    ✓ 24. Changing price after approval strictly invalidates approval and blocks checkout
-```
-
----
-
-## 9. Security Limitations & Production Readiness
-
-While Phase 5 establishes complete server-side gate enforcement and PayPal Sandbox integration, the following requirements should be implemented before moving to production:
-
-1. **Authentication Migration:** In production, replace `x-user-id` session bearer headers with signed JWTs (e.g. Auth0, Clerk, or OAuth 2.0 OIDC).
-2. **PayPal Webhooks:** Integrate PayPal Webhooks (`CHECKOUT.ORDER.APPROVED`, `PAYMENT.CAPTURE.COMPLETED`) with signature verification (`PAYPAL-TRANSMISSION-SIG`) as a secondary reconciliation mechanism for asynchronous capture notifications.
-3. **Hardware Security Modules (HSM):** Store HMAC signing keys and PayPal API secrets in a cloud secret manager (AWS KMS, GCP Secret Manager, or HashiCorp Vault) rather than environment variables.
-4. **Database Clustering:** For production scale, transition the local SQLite database to a distributed Postgres cluster with read replicas and row-level security (RLS).
+MIT
