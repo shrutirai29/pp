@@ -26,7 +26,16 @@ import { VerificationPage } from './pages/VerificationPage';
 import { AuditTrailPage } from './pages/AuditTrailPage';
 
 export function App() {
-  const [currentView, setCurrentView] = useState<NavView>('dashboard');
+  const [currentView, setCurrentView] = useState<NavView>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const v = params.get('view') as NavView | null;
+      if (v && ['dashboard', 'find-deal', 'workspace', 'negotiation', 'intentlock', 'audit'].includes(v)) {
+        return v;
+      }
+    }
+    return 'dashboard';
+  });
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [deals, setDeals] = useState<Deal[]>(MOCK_DASHBOARD_DEALS);
   const [activeIntent, setActiveIntent] = useState<UserIntent>(DEFAULT_EXAMPLE_INTENT);
